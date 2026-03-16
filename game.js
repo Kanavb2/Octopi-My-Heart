@@ -63,7 +63,7 @@ const LEVELS = [
   },
   {
     name: 'Level 2',
-    timer: 10000,
+    timer: 12000,
     playerStart: { x: 10, y: 16 },
     blue: { x: 10, y: 4 },
     pink: { x: 10, y: 17 },
