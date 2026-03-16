@@ -130,14 +130,9 @@ function tryMove(dx, dy) {
   if (newX < 0 || newX >= GRID_SIZE || newY < 0 || newY >= GRID_SIZE) return;
   if (LEVELS[currentLevel].isWall(newX, newY)) return;
 
-  // Level 2: after collecting blue, block all previously visited cells
-  if (gameState.blockedCells && gameState.blockedCells.has(newX + ',' + newY)) return;
-
   if (dx !== 0 && dy !== 0) {
     if (LEVELS[currentLevel].isWall(gameState.player.x + dx, gameState.player.y)) return;
     if (LEVELS[currentLevel].isWall(gameState.player.x, gameState.player.y + dy)) return;
-    if (gameState.blockedCells && gameState.blockedCells.has((gameState.player.x + dx) + ',' + gameState.player.y)) return;
-    if (gameState.blockedCells && gameState.blockedCells.has(gameState.player.x + ',' + (gameState.player.y + dy))) return;
   }
 
   gameState.player.x = newX;
@@ -158,17 +153,6 @@ function checkObjectives() {
     b.collected = true;
     objectiveEl.textContent = LEVELS[currentLevel].name + ': Now reach the pink octopus!';
     playCollectSound(600);
-
-    // Level 2: block all cells visited on the way up so player must take a new route back
-    if (currentLevel === 1) {
-      gameState.blockedCells = new Set();
-      for (const pt of gameState.path) {
-        gameState.blockedCells.add(pt.x + ',' + pt.y);
-      }
-      // Keep current position and pink target open
-      gameState.blockedCells.delete(p.x + ',' + p.y);
-      gameState.blockedCells.delete(pk.x + ',' + pk.y);
-    }
   }
 
   if (b.collected && !pk.collected && p.x === pk.x && p.y === pk.y) {
@@ -312,15 +296,10 @@ function drawPlayer(x, y) {
 
 function drawWalkableArea() {
   const level = LEVELS[currentLevel];
+  ctx.fillStyle = '#111111';
   for (let x = 0; x < GRID_SIZE; x++) {
     for (let y = 0; y < GRID_SIZE; y++) {
       if (!level.isWall(x, y)) {
-        // Tint blocked cells with a subtle red so the player sees them
-        if (gameState.blockedCells && gameState.blockedCells.has(x + ',' + y)) {
-          ctx.fillStyle = '#1a0808';
-        } else {
-          ctx.fillStyle = '#111111';
-        }
         ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
       }
     }
