@@ -34,15 +34,14 @@ function isWallLevel1(x, y) {
 }
 
 function isWallLevel2(x, y) {
-  if (x < 1 || x > 18 || y < 1 || y > 18) return true;
-  if (Math.hypot(x - 7, y - 6) < 3.5) return true;
-  if (Math.hypot(x - 13, y - 6) < 3.5) return true;
-  if (y >= 11) {
-    const t = (y - 11) / 7;
-    const halfWidth = 8 * (1 - t * t) + 0.5;
-    if (Math.abs(x - 10) > halfWidth) return true;
-  }
-  return false;
+  // The classic implicit heart curve, sampled at cell centers. The arena is
+  // rendered as a smooth vector below, while this matching mask keeps movement
+  // inside the heart without turning its silhouette into a pile of squares.
+  const heartX = (x - 9.5) / 8.7;
+  const heartY = -(y - 9.2) / 8.7;
+  const curve = Math.pow(heartX * heartX + heartY * heartY - 1, 3)
+    - heartX * heartX * Math.pow(heartY, 3);
+  return curve > 0;
 }
 
 function isWallLevel3(x, y) {
@@ -71,7 +70,7 @@ const LEVELS = [
   },
   {
     name: 'Level 3',
-    timer: 6000,
+    timer: 12000,
     playerStart: { x: 4, y: 3 },
     blue: { x: 10, y: 15 },
     pink: { x: 15, y: 3 },
@@ -111,6 +110,14 @@ window.addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
     e.preventDefault();
     keys[e.key] = true;
+    const movement = {
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+    };
+    const [dx, dy] = movement[e.key];
+    tryMove(dx, dy);
   }
 });
 window.addEventListener('keyup', (e) => {
@@ -297,6 +304,12 @@ function drawPlayer(x, y) {
 function drawWalkableArea() {
   const level = LEVELS[currentLevel];
   ctx.fillStyle = '#111111';
+
+  if (currentLevel === 1) {
+    drawHeartArena();
+    return;
+  }
+
   for (let x = 0; x < GRID_SIZE; x++) {
     for (let y = 0; y < GRID_SIZE; y++) {
       if (!level.isWall(x, y)) {
@@ -304,6 +317,44 @@ function drawWalkableArea() {
       }
     }
   }
+}
+
+function drawHeartArena() {
+  const centerX = canvas.width / 2;
+  const top = CELL_SIZE * 1.2;
+  const width = CELL_SIZE * 18;
+  const height = CELL_SIZE * 17.3;
+
+  ctx.beginPath();
+  ctx.moveTo(centerX, top + height * 0.22);
+  ctx.bezierCurveTo(
+    centerX - width * 0.08, top,
+    centerX - width * 0.5, top - height * 0.02,
+    centerX - width * 0.5, top + height * 0.29,
+  );
+  ctx.bezierCurveTo(
+    centerX - width * 0.5, top + height * 0.56,
+    centerX - width * 0.18, top + height * 0.73,
+    centerX, top + height,
+  );
+  ctx.bezierCurveTo(
+    centerX + width * 0.18, top + height * 0.73,
+    centerX + width * 0.5, top + height * 0.56,
+    centerX + width * 0.5, top + height * 0.29,
+  );
+  ctx.bezierCurveTo(
+    centerX + width * 0.5, top - height * 0.02,
+    centerX + width * 0.08, top,
+    centerX, top + height * 0.22,
+  );
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = '#ec4899';
+  ctx.globalAlpha = 0.32;
+  ctx.lineWidth = Math.max(2, CELL_SIZE * 0.08);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
 }
 
 function render() {
@@ -352,7 +403,10 @@ function startReveal() {
 
 function buildRevealLayout() {
   // Compute bounding box for each level's recorded path
-  const bounds = allPaths.map(function (lp) {
+  const bounds = allPaths.map(function (lp, levelIndex) {
+    if (levelIndex === 1) {
+      return { minX: 1, maxX: 18, minY: 1, maxY: 18, w: 17, h: 17 };
+    }
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
     for (const p of lp.path) {
@@ -421,7 +475,7 @@ function buildRevealFrames() {
   for (let i = allPaths.length - 1; i >= 0; i--) {
     const lp = allPaths[i];
     const t = revealTransforms[i];
-    const reversed = [...lp.path].reverse();
+    const reversed = i === 1 ? buildHeartPoints() : [...lp.path].reverse();
 
     for (const p of reversed) {
       revealFrames.push({
@@ -436,6 +490,18 @@ function buildRevealFrames() {
       revealFrames.push({ levelIdx: -1, px: 0, py: 0 });
     }
   }
+}
+
+function buildHeartPoints() {
+  const points = [];
+  for (let step = 0; step <= 96; step++) {
+    const angle = (step / 96) * Math.PI * 2;
+    const x = 16 * Math.pow(Math.sin(angle), 3);
+    const y = 13 * Math.cos(angle) - 5 * Math.cos(2 * angle)
+      - 2 * Math.cos(3 * angle) - Math.cos(4 * angle);
+    points.push({ x: 9.5 + x * 0.48, y: 10 - y * 0.48 });
+  }
+  return points;
 }
 
 function updateReveal() {
@@ -471,6 +537,24 @@ function drawRevealOutlines() {
     const t = revealTransforms[lvl];
     const isWall = wallFns[lvl];
     if (!isWall) continue;
+
+    if (lvl === 1) {
+      const heart = buildHeartPoints();
+      ctx.fillStyle = '#141414';
+      ctx.strokeStyle = '#282028';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      heart.forEach(function (point, index) {
+        const px = point.x * t.scale + t.offsetX;
+        const py = point.y * t.scale + t.offsetY;
+        if (index === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      continue;
+    }
 
     // Draw walkable cells as subtle fill
     ctx.fillStyle = '#141414';
