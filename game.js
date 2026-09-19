@@ -275,34 +275,85 @@ function updateTimer() {
 function drawOctopus(x, y, color) {
   const px = x * CELL_SIZE + CELL_SIZE / 2;
   const py = y * CELL_SIZE + CELL_SIZE / 2;
-  const r = CELL_SIZE * 0.4;
+  const r = CELL_SIZE * 0.62;
+  const now = performance.now();
+  const phase = color === '#3b82f6' ? 0 : Math.PI;
+  const bob = Math.sin(now / 420 + phase) * r * 0.08;
+  const sway = Math.sin(now / 650 + phase) * 0.035;
+  const blinkTime = (now + (phase ? 1100 : 0)) % 3600;
+  const eyeHeight = blinkTime > 3440 ? 0.12 : 1;
+  const outline = color === '#3b82f6' ? '#1d4ed8' : '#be185d';
 
-  ctx.fillStyle = color;
+  ctx.save();
+  ctx.translate(px, py + bob);
+  ctx.rotate(sway);
+
+  // Soft grounded shadow keeps the bob subtle rather than floaty.
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
   ctx.beginPath();
-  ctx.arc(px, py - r * 0.2, r, 0, Math.PI * 2);
+  ctx.ellipse(0, r * 1.08 - bob, r * 0.76, r * 0.2, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.arc(px - r * 0.3, py - r * 0.35, r * 0.18, 0, Math.PI * 2);
-  ctx.arc(px + r * 0.3, py - r * 0.35, r * 0.18, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#000000';
-  ctx.beginPath();
-  ctx.arc(px - r * 0.3, py - r * 0.35, r * 0.08, 0, Math.PI * 2);
-  ctx.arc(px + r * 0.3, py - r * 0.35, r * 0.08, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = color;
-  ctx.lineWidth = r * 0.2;
+  // Four short tentacles with a very small idle wave.
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = r * 0.25;
   ctx.lineCap = 'round';
   for (let i = 0; i < 4; i++) {
-    const tx = px - r * 0.6 + i * r * 0.4;
+    const startX = (-0.62 + i * 0.41) * r;
+    const wave = Math.sin(now / 300 + i * 1.4 + phase) * r * 0.09;
     ctx.beginPath();
-    ctx.moveTo(tx, py + r * 0.4);
-    ctx.quadraticCurveTo(tx + r * 0.15, py + r * 0.8, tx - r * 0.1, py + r);
+    ctx.moveTo(startX, r * 0.42);
+    ctx.quadraticCurveTo(startX + wave, r * 0.78, startX - wave * 0.45, r * 0.98);
     ctx.stroke();
   }
+
+  // Rounded chibi head: wider at the cheeks and slightly flat underneath.
+  ctx.fillStyle = color;
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = Math.max(1.2, r * 0.1);
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.82, r * 0.34);
+  ctx.bezierCurveTo(-r * 0.98, -r * 0.2, -r * 0.62, -r * 0.92, 0, -r * 0.96);
+  ctx.bezierCurveTo(r * 0.62, -r * 0.92, r * 0.98, -r * 0.2, r * 0.82, r * 0.34);
+  ctx.quadraticCurveTo(r * 0.58, r * 0.64, 0, r * 0.62);
+  ctx.quadraticCurveTo(-r * 0.58, r * 0.64, -r * 0.82, r * 0.34);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Small highlight, eyes, blush, and a tiny smile.
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.24)';
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.34, -r * 0.58, r * 0.2, r * 0.1, -0.45, 0, Math.PI * 2);
+  ctx.fill();
+
+  for (const eyeX of [-0.3, 0.3]) {
+    ctx.save();
+    ctx.translate(r * eyeX, -r * 0.2);
+    ctx.scale(1, eyeHeight);
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 0.18, r * 0.23, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#17221d';
+    ctx.beginPath();
+    ctx.arc(r * 0.02, r * 0.02, r * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.fillStyle = 'rgba(255, 190, 205, 0.72)';
+  ctx.beginPath();
+  ctx.arc(-r * 0.58, r * 0.12, r * 0.11, 0, Math.PI * 2);
+  ctx.arc(r * 0.58, r * 0.12, r * 0.11, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = '#17221d';
+  ctx.lineWidth = Math.max(1, r * 0.07);
+  ctx.beginPath();
+  ctx.arc(0, r * 0.08, r * 0.17, 0.16 * Math.PI, 0.84 * Math.PI);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawPlayer(x, y) {
