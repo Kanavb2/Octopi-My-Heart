@@ -11,8 +11,9 @@ const revealOverlay = document.getElementById('revealOverlay');
 const revealMessage = document.getElementById('revealMessage');
 
 // -- Constants -------------------------------------------------------
-const GRID_SIZE = 20;
-const MOVE_SPEED = 120; // ms between moves
+const GRID_SIZE = 30;
+const MOVE_SPEED = 75; // ms between moves
+const PLAYER_RADIUS = 0.5;
 let CELL_SIZE = 1;
 
 // -- Canvas ----------------------------------------------------------
@@ -27,53 +28,61 @@ window.addEventListener('resize', resizeCanvas);
 
 // -- Level definitions -----------------------------------------------
 
-function isWallLevel1(x, y) {
-  if (x < 9 || x > 11) return true;
-  if (y < 1 || y > 18) return true;
-  return false;
+const LEVEL_CIRCLES = [
+  [
+    { x: 0, y: 15, radius: 10 },
+    { x: 30, y: 15, radius: 10 },
+  ],
+  [
+    { x: 10, y: 10, radius: 5 },
+    { x: 20, y: 10, radius: 5 },
+    { x: 15, y: 10, radius: 1, invisible: true },
+    { x: 0, y: 30, radius: 14.5 },
+    { x: 30, y: 30, radius: 14.5 },
+  ],
+  [
+    { x: 15, y: 15, radius: 11.5 },
+  ],
+];
+
+function makeCircleCollision(circles) {
+  return function isWall(x, y) {
+    return circles.some(function (circle) {
+      return Math.hypot(x - circle.x, y - circle.y) < circle.radius + PLAYER_RADIUS;
+    });
+  };
 }
 
-function isWallLevel2(x, y) {
-  // The classic implicit heart curve, sampled at cell centers. The arena is
-  // rendered as a smooth vector below, while this matching mask keeps movement
-  // inside the heart without turning its silhouette into a pile of squares.
-  const heartX = (x - 9.5) / 8.7;
-  const heartY = -(y - 9.2) / 8.7;
-  const curve = Math.pow(heartX * heartX + heartY * heartY - 1, 3)
-    - heartX * heartX * Math.pow(heartY, 3);
-  return curve > 0;
-}
-
-function isWallLevel3(x, y) {
-  if (x >= 3 && x <= 5 && y >= 2 && y <= 16) return false;
-  if (x >= 3 && x <= 16 && y >= 14 && y <= 16) return false;
-  if (x >= 14 && x <= 16 && y >= 2 && y <= 16) return false;
-  return true;
-}
+const isWallLevel1 = makeCircleCollision(LEVEL_CIRCLES[0]);
+const isWallLevel2 = makeCircleCollision(LEVEL_CIRCLES[1]);
+const isWallLevel3 = makeCircleCollision(LEVEL_CIRCLES[2]);
 
 const LEVELS = [
   {
     name: 'Level 1',
     timer: 6000,
-    playerStart: { x: 10, y: 10 },
-    blue: { x: 10, y: 2 },
-    pink: { x: 10, y: 17 },
+    playerStart: { x: 15, y: 17.5 },
+    blue: { x: 15, y: 27.5 },
+    pink: { x: 15, y: 7.5 },
+    circles: LEVEL_CIRCLES[0],
     isWall: isWallLevel1,
   },
   {
     name: 'Level 2',
     timer: 12000,
-    playerStart: { x: 10, y: 16 },
-    blue: { x: 10, y: 4 },
-    pink: { x: 10, y: 17 },
+    playerStart: { x: 15, y: 25 },
+    blue: { x: 15, y: 7.5 },
+    pink: { x: 15, y: 24 },
+    circles: LEVEL_CIRCLES[1],
     isWall: isWallLevel2,
   },
   {
     name: 'Level 3',
     timer: 12000,
-    playerStart: { x: 4, y: 3 },
-    blue: { x: 10, y: 15 },
-    pink: { x: 15, y: 3 },
+    playerStart: { x: 3, y: 7.5 },
+    blue: { x: 15, y: 27 },
+    pink: { x: 27, y: 7.5 },
+    circles: LEVEL_CIRCLES[2],
     isWall: isWallLevel3,
   },
 ];
@@ -95,10 +104,12 @@ function resetLevel() {
     state: 'playing',
     lastMoveTime: 0,
     canMove: true,
+    levelTwoEntrySide: null,
+    levelTwoExitSide: null,
   };
   gameState.path.push({ ...gameState.player });
   objectiveEl.textContent = level.name + ': Reach the blue octopus';
-  statusEl.textContent = '';
+  statusEl.textContent = 'Hold two arrow keys to move diagonally.';
   timerEl.textContent = (level.timer / 1000).toFixed(1);
   timerEl.classList.remove('warning', 'critical');
   lastTime = Date.now();
@@ -110,13 +121,8 @@ window.addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
     e.preventDefault();
     keys[e.key] = true;
-    const movement = {
-      ArrowUp: [0, -1],
-      ArrowDown: [0, 1],
-      ArrowLeft: [-1, 0],
-      ArrowRight: [1, 0],
-    };
-    const [dx, dy] = movement[e.key];
+    const dx = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0);
+    const dy = (keys.ArrowDown ? 1 : 0) - (keys.ArrowUp ? 1 : 0);
     tryMove(dx, dy);
   }
 });
@@ -148,6 +154,15 @@ function tryMove(dx, dy) {
   gameState.path.push({ x: newX, y: newY });
 
   checkObjectives();
+
+  if (currentLevel === 1) {
+    if (!gameState.blue.collected && !gameState.levelTwoEntrySide && newY < 15) {
+      gameState.levelTwoEntrySide = newX < 15 ? 'left' : 'right';
+    }
+    if (gameState.blue.collected && !gameState.levelTwoExitSide && Math.abs(newX - 15) > 3) {
+      gameState.levelTwoExitSide = newX < 15 ? 'left' : 'right';
+    }
+  }
 }
 
 // -- Objectives ------------------------------------------------------
@@ -156,13 +171,13 @@ function checkObjectives() {
   const b = gameState.blue;
   const pk = gameState.pink;
 
-  if (!b.collected && p.x === b.x && p.y === b.y) {
+  if (!b.collected && Math.hypot(p.x - b.x, p.y - b.y) <= 0.6) {
     b.collected = true;
     objectiveEl.textContent = LEVELS[currentLevel].name + ': Now reach the pink octopus!';
     playCollectSound(600);
   }
 
-  if (b.collected && !pk.collected && p.x === pk.x && p.y === pk.y) {
+  if (b.collected && !pk.collected && Math.hypot(p.x - pk.x, p.y - pk.y) <= 0.6) {
     pk.collected = true;
     gameState.state = 'success';
     gameState.canMove = false;
@@ -229,7 +244,12 @@ function updateTimer() {
   const now = Date.now();
   const delta = now - lastTime;
   lastTime = now;
-  gameState.timer -= delta;
+  const wrongWayPenalty = currentLevel === 1
+    && gameState.levelTwoEntrySide
+    && gameState.levelTwoEntrySide === gameState.levelTwoExitSide
+    ? 2.8
+    : 1;
+  gameState.timer -= delta * wrongWayPenalty;
 
   if (gameState.timer <= 0) {
     gameState.timer = 0;
@@ -303,58 +323,20 @@ function drawPlayer(x, y) {
 
 function drawWalkableArea() {
   const level = LEVELS[currentLevel];
-  ctx.fillStyle = '#111111';
+  ctx.fillStyle = '#171717';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  if (currentLevel === 1) {
-    drawHeartArena();
-    return;
-  }
+  ctx.fillStyle = '#050505';
+  level.circles.forEach(function (circle) {
+    if (circle.invisible) return;
+    ctx.beginPath();
+    ctx.arc(circle.x * CELL_SIZE, circle.y * CELL_SIZE, circle.radius * CELL_SIZE, 0, Math.PI * 2);
+    ctx.fill();
+  });
 
-  for (let x = 0; x < GRID_SIZE; x++) {
-    for (let y = 0; y < GRID_SIZE; y++) {
-      if (!level.isWall(x, y)) {
-        ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-      }
-    }
-  }
-}
-
-function drawHeartArena() {
-  const centerX = canvas.width / 2;
-  const top = CELL_SIZE * 1.2;
-  const width = CELL_SIZE * 18;
-  const height = CELL_SIZE * 17.3;
-
-  ctx.beginPath();
-  ctx.moveTo(centerX, top + height * 0.22);
-  ctx.bezierCurveTo(
-    centerX - width * 0.08, top,
-    centerX - width * 0.5, top - height * 0.02,
-    centerX - width * 0.5, top + height * 0.29,
-  );
-  ctx.bezierCurveTo(
-    centerX - width * 0.5, top + height * 0.56,
-    centerX - width * 0.18, top + height * 0.73,
-    centerX, top + height,
-  );
-  ctx.bezierCurveTo(
-    centerX + width * 0.18, top + height * 0.73,
-    centerX + width * 0.5, top + height * 0.56,
-    centerX + width * 0.5, top + height * 0.29,
-  );
-  ctx.bezierCurveTo(
-    centerX + width * 0.5, top - height * 0.02,
-    centerX + width * 0.08, top,
-    centerX, top + height * 0.22,
-  );
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.strokeStyle = '#ec4899';
-  ctx.globalAlpha = 0.32;
-  ctx.lineWidth = Math.max(2, CELL_SIZE * 0.08);
-  ctx.stroke();
-  ctx.globalAlpha = 1;
+  ctx.strokeStyle = '#333333';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
 }
 
 function render() {
@@ -403,10 +385,7 @@ function startReveal() {
 
 function buildRevealLayout() {
   // Compute bounding box for each level's recorded path
-  const bounds = allPaths.map(function (lp, levelIndex) {
-    if (levelIndex === 1) {
-      return { minX: 1, maxX: 18, minY: 1, maxY: 18, w: 17, h: 17 };
-    }
+  const bounds = allPaths.map(function (lp) {
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
     for (const p of lp.path) {
@@ -475,7 +454,7 @@ function buildRevealFrames() {
   for (let i = allPaths.length - 1; i >= 0; i--) {
     const lp = allPaths[i];
     const t = revealTransforms[i];
-    const reversed = i === 1 ? buildHeartPoints() : [...lp.path].reverse();
+    const reversed = [...lp.path].reverse();
 
     for (const p of reversed) {
       revealFrames.push({
@@ -490,18 +469,6 @@ function buildRevealFrames() {
       revealFrames.push({ levelIdx: -1, px: 0, py: 0 });
     }
   }
-}
-
-function buildHeartPoints() {
-  const points = [];
-  for (let step = 0; step <= 96; step++) {
-    const angle = (step / 96) * Math.PI * 2;
-    const x = 16 * Math.pow(Math.sin(angle), 3);
-    const y = 13 * Math.cos(angle) - 5 * Math.cos(2 * angle)
-      - 2 * Math.cos(3 * angle) - Math.cos(4 * angle);
-    points.push({ x: 9.5 + x * 0.48, y: 10 - y * 0.48 });
-  }
-  return points;
 }
 
 function updateReveal() {
@@ -537,24 +504,6 @@ function drawRevealOutlines() {
     const t = revealTransforms[lvl];
     const isWall = wallFns[lvl];
     if (!isWall) continue;
-
-    if (lvl === 1) {
-      const heart = buildHeartPoints();
-      ctx.fillStyle = '#141414';
-      ctx.strokeStyle = '#282028';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      heart.forEach(function (point, index) {
-        const px = point.x * t.scale + t.offsetX;
-        const py = point.y * t.scale + t.offsetY;
-        if (index === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      });
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      continue;
-    }
 
     // Draw walkable cells as subtle fill
     ctx.fillStyle = '#141414';

@@ -1,5 +1,8 @@
 # Octopi My Heart
 
+Level geometry is adapted from Nicky Case's CC0 game
+[it's a(door)able](https://ncase.me/door/), with original characters and presentation.
+
 A puzzle game where you bring two octopi together, but your path secretly draws a message.
 
 ## Gameplay
