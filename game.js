@@ -89,9 +89,9 @@ const LEVELS = [
   {
     name: 'Level 2',
     timer: 12000,
-    playerStart: { x: 15, y: 15 },
-    blue: { x: 15, y: 2.5 },
-    pink: { x: 15, y: 27.5 },
+    playerStart: { x: 15, y: 25.5 },
+    blue: { x: 15, y: 7 },
+    pink: { x: 15, y: 25.5 },
     circles: LEVEL_CIRCLES[1],
     isWall: isWallLevel2,
   },
