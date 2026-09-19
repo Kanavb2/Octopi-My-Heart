@@ -13,7 +13,7 @@ const revealMessage = document.getElementById('revealMessage');
 // -- Constants -------------------------------------------------------
 const GRID_SIZE = 30;
 const MOVE_SPEED = 75; // ms between moves
-const PLAYER_RADIUS = 0.5;
+const PLAYER_RADIUS = 0.3;
 let CELL_SIZE = 1;
 
 // -- Canvas ----------------------------------------------------------
@@ -36,7 +36,6 @@ const LEVEL_CIRCLES = [
   [
     { x: 10, y: 10, radius: 5 },
     { x: 20, y: 10, radius: 5 },
-    { x: 15, y: 10, radius: 1, invisible: true },
     { x: 0, y: 30, radius: 14.5 },
     { x: 30, y: 30, radius: 14.5 },
   ],
@@ -51,6 +50,25 @@ function makeCircleCollision(circles) {
       return Math.hypot(x - circle.x, y - circle.y) < circle.radius + PLAYER_RADIUS;
     });
   };
+}
+
+function movementHitsCircle(startX, startY, endX, endY, circle) {
+  const deltaX = endX - startX;
+  const deltaY = endY - startY;
+  const segmentLengthSquared = deltaX * deltaX + deltaY * deltaY;
+  const projection = segmentLengthSquared === 0
+    ? 0
+    : ((circle.x - startX) * deltaX + (circle.y - startY) * deltaY) / segmentLengthSquared;
+  const clampedProjection = Math.max(0, Math.min(1, projection));
+  const closestX = startX + deltaX * clampedProjection;
+  const closestY = startY + deltaY * clampedProjection;
+  return Math.hypot(closestX - circle.x, closestY - circle.y) < circle.radius + PLAYER_RADIUS;
+}
+
+function isMovementBlocked(level, startX, startY, endX, endY) {
+  return level.circles.some(function (circle) {
+    return movementHitsCircle(startX, startY, endX, endY, circle);
+  });
 }
 
 const isWallLevel1 = makeCircleCollision(LEVEL_CIRCLES[0]);
@@ -141,12 +159,13 @@ function tryMove(dx, dy) {
   const newY = gameState.player.y + dy;
 
   if (newX < 0 || newX >= GRID_SIZE || newY < 0 || newY >= GRID_SIZE) return;
-  if (LEVELS[currentLevel].isWall(newX, newY)) return;
-
-  if (dx !== 0 && dy !== 0) {
-    if (LEVELS[currentLevel].isWall(gameState.player.x + dx, gameState.player.y)) return;
-    if (LEVELS[currentLevel].isWall(gameState.player.x, gameState.player.y + dy)) return;
-  }
+  if (isMovementBlocked(
+    LEVELS[currentLevel],
+    gameState.player.x,
+    gameState.player.y,
+    newX,
+    newY,
+  )) return;
 
   gameState.player.x = newX;
   gameState.player.y = newY;
