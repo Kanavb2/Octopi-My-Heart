@@ -12,7 +12,8 @@ const revealMessage = document.getElementById('revealMessage');
 
 // -- Constants -------------------------------------------------------
 const GRID_SIZE = 30;
-const MOVE_SPEED = 75; // ms between moves
+const MOVE_STEP = 0.5;
+const MOVE_SPEED = 38; // Half-cell moves preserve the original travel speed with smoother curves.
 const PLAYER_RADIUS = 0.3;
 let CELL_SIZE = 1;
 
@@ -34,10 +35,10 @@ const LEVEL_CIRCLES = [
     { x: 30, y: 15, radius: 10 },
   ],
   [
-    { x: 10, y: 10, radius: 5 },
-    { x: 20, y: 10, radius: 5 },
-    { x: 0, y: 30, radius: 14.5 },
-    { x: 30, y: 30, radius: 14.5 },
+    { x: 10, y: 8, radius: 5 },
+    { x: 20, y: 8, radius: 5 },
+    { x: 10, y: 22, radius: 5 },
+    { x: 20, y: 22, radius: 5 },
   ],
   [
     { x: 15, y: 15, radius: 11.5 },
@@ -88,9 +89,9 @@ const LEVELS = [
   {
     name: 'Level 2',
     timer: 12000,
-    playerStart: { x: 15, y: 25 },
-    blue: { x: 15, y: 7.5 },
-    pink: { x: 15, y: 24 },
+    playerStart: { x: 15, y: 15 },
+    blue: { x: 15, y: 1.5 },
+    pink: { x: 15, y: 28.5 },
     circles: LEVEL_CIRCLES[1],
     isWall: isWallLevel2,
   },
@@ -155,10 +156,13 @@ function tryMove(dx, dy) {
   const now = Date.now();
   if (now - gameState.lastMoveTime < MOVE_SPEED) return;
 
-  const newX = gameState.player.x + dx;
-  const newY = gameState.player.y + dy;
+  const newX = gameState.player.x + dx * MOVE_STEP;
+  const newY = gameState.player.y + dy * MOVE_STEP;
 
-  if (newX < 0 || newX >= GRID_SIZE || newY < 0 || newY >= GRID_SIZE) return;
+  if (
+    newX < PLAYER_RADIUS || newX > GRID_SIZE - PLAYER_RADIUS
+    || newY < PLAYER_RADIUS || newY > GRID_SIZE - PLAYER_RADIUS
+  ) return;
   if (isMovementBlocked(
     LEVELS[currentLevel],
     gameState.player.x,
@@ -178,7 +182,12 @@ function tryMove(dx, dy) {
     if (!gameState.blue.collected && !gameState.levelTwoEntrySide && newY < 15) {
       gameState.levelTwoEntrySide = newX < 15 ? 'left' : 'right';
     }
-    if (gameState.blue.collected && !gameState.levelTwoExitSide && Math.abs(newX - 15) > 3) {
+    if (
+      gameState.blue.collected
+      && !gameState.levelTwoExitSide
+      && newY > 15
+      && Math.abs(newX - 15) > 3
+    ) {
       gameState.levelTwoExitSide = newX < 15 ? 'left' : 'right';
     }
   }
@@ -292,8 +301,8 @@ function updateTimer() {
 
 // -- Drawing (gameplay) ----------------------------------------------
 function drawOctopus(x, y, color) {
-  const px = x * CELL_SIZE + CELL_SIZE / 2;
-  const py = y * CELL_SIZE + CELL_SIZE / 2;
+  const px = x * CELL_SIZE;
+  const py = y * CELL_SIZE;
   const r = CELL_SIZE * 0.62;
   const now = performance.now();
   const phase = color === '#3b82f6' ? 0 : Math.PI;
@@ -376,8 +385,8 @@ function drawOctopus(x, y, color) {
 }
 
 function drawPlayer(x, y) {
-  const px = x * CELL_SIZE + CELL_SIZE / 2;
-  const py = y * CELL_SIZE + CELL_SIZE / 2;
+  const px = x * CELL_SIZE;
+  const py = y * CELL_SIZE;
   const r = CELL_SIZE * 0.3;
 
   ctx.fillStyle = '#ffffff';
@@ -454,67 +463,23 @@ function startReveal() {
 }
 
 function buildRevealLayout() {
-  // Compute bounding box for each level's recorded path
-  const bounds = allPaths.map(function (lp) {
-    let minX = Infinity, maxX = -Infinity;
-    let minY = Infinity, maxY = -Infinity;
-    for (const p of lp.path) {
-      if (p.x < minX) minX = p.x;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.y > maxY) maxY = p.y;
-    }
+  const panelCount = allPaths.length;
+  const padding = canvas.width * 0.06;
+  const gap = canvas.width * 0.035;
+  const availableWidth = canvas.width - padding * 2 - gap * Math.max(0, panelCount - 1);
+  const panelSize = Math.min(availableWidth / panelCount, canvas.height * 0.62);
+  const totalWidth = panelSize * panelCount + gap * Math.max(0, panelCount - 1);
+  const startX = (canvas.width - totalWidth) / 2;
+  const startY = (canvas.height - panelSize) / 2;
+  const scale = panelSize / GRID_SIZE;
+
+  revealTransforms = allPaths.map(function (_, index) {
     return {
-      minX: minX,
-      maxX: maxX,
-      minY: minY,
-      maxY: maxY,
-      w: Math.max(maxX - minX, 1),
-      h: Math.max(maxY - minY, 1),
+      offsetX: startX + index * (panelSize + gap),
+      offsetY: startY,
+      scale: scale,
     };
   });
-
-  // Layout: all three paths at the same height, arranged left to right
-  const padding = 50;
-  const gap = 35;
-  const availH = canvas.height - padding * 2;
-  const targetH = availH * 0.55;
-
-  // Per-level scale so each path fills the target height
-  const perScale = bounds.map(function (b) {
-    return targetH / b.h;
-  });
-  const perWidth = bounds.map(function (b, i) {
-    return b.w * perScale[i];
-  });
-  const totalW = perWidth.reduce(function (a, b) { return a + b; }, 0) + gap * (perWidth.length - 1);
-
-  // Shrink if wider than canvas
-  const availW = canvas.width - padding * 2;
-  let gScale = 1;
-  if (totalW > availW) gScale = availW / totalW;
-
-  const finalScales = perScale.map(function (s) { return s * gScale; });
-  const finalWidths = perWidth.map(function (w) { return w * gScale; });
-  const finalTotal = finalWidths.reduce(function (a, b) { return a + b; }, 0) + gap * (finalWidths.length - 1);
-
-  let xCursor = (canvas.width - finalTotal) / 2;
-  const yCenter = canvas.height * 0.42;
-
-  revealTransforms = [];
-  for (let i = 0; i < bounds.length; i++) {
-    const b = bounds[i];
-    const s = finalScales[i];
-    const h = b.h * s;
-
-    revealTransforms.push({
-      offsetX: xCursor - b.minX * s,
-      offsetY: yCenter - h / 2 - b.minY * s,
-      scale: s,
-    });
-
-    xCursor += finalWidths[i] + gap;
-  }
 }
 
 function buildRevealFrames() {
@@ -579,9 +544,9 @@ function drawRevealOutlines() {
     ctx.fillStyle = '#141414';
     for (let x = 0; x < GRID_SIZE; x++) {
       for (let y = 0; y < GRID_SIZE; y++) {
-        if (!isWall(x, y)) {
-          const px = x * t.scale + t.offsetX - t.scale / 2;
-          const py = y * t.scale + t.offsetY - t.scale / 2;
+        if (!isWall(x + 0.5, y + 0.5)) {
+          const px = x * t.scale + t.offsetX;
+          const py = y * t.scale + t.offsetY;
           ctx.fillRect(px, py, t.scale, t.scale);
         }
       }
@@ -592,21 +557,21 @@ function drawRevealOutlines() {
     ctx.lineWidth = 1;
     for (let x = 0; x < GRID_SIZE; x++) {
       for (let y = 0; y < GRID_SIZE; y++) {
-        if (isWall(x, y)) continue;
-        const px = x * t.scale + t.offsetX - t.scale / 2;
-        const py = y * t.scale + t.offsetY - t.scale / 2;
+        if (isWall(x + 0.5, y + 0.5)) continue;
+        const px = x * t.scale + t.offsetX;
+        const py = y * t.scale + t.offsetY;
 
         // Check each neighbor; draw edge if neighbor is wall or out of bounds
-        if (x === 0 || isWall(x - 1, y)) {
+        if (x === 0 || isWall(x - 0.5, y + 0.5)) {
           ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py + t.scale); ctx.stroke();
         }
-        if (x === GRID_SIZE - 1 || isWall(x + 1, y)) {
+        if (x === GRID_SIZE - 1 || isWall(x + 1.5, y + 0.5)) {
           ctx.beginPath(); ctx.moveTo(px + t.scale, py); ctx.lineTo(px + t.scale, py + t.scale); ctx.stroke();
         }
-        if (y === 0 || isWall(x, y - 1)) {
+        if (y === 0 || isWall(x + 0.5, y - 0.5)) {
           ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + t.scale, py); ctx.stroke();
         }
-        if (y === GRID_SIZE - 1 || isWall(x, y + 1)) {
+        if (y === GRID_SIZE - 1 || isWall(x + 0.5, y + 1.5)) {
           ctx.beginPath(); ctx.moveTo(px, py + t.scale); ctx.lineTo(px + t.scale, py + t.scale); ctx.stroke();
         }
       }
