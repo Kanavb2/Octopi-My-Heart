@@ -333,17 +333,7 @@ function tryMove(dx, dy) {
   if (now - gameState.lastMoveTime < MOVE_SPEED) return;
 
   const level = LEVELS[currentLevel];
-  let horizontalInput = dx;
-  const levelTwoCurrentActive = currentLevel === 1
-    && gameState.blue.collected
-    && gameState.levelTwoEntrySide
-    && gameState.player.y < 16;
-  if (levelTwoCurrentActive) {
-    const currentDirection = gameState.levelTwoEntrySide === 'left' ? 1 : -1;
-    horizontalInput = Math.max(-1, Math.min(1, dx * .55 + currentDirection * .7));
-  }
-
-  const deltaX = horizontalInput * MOVE_STEP;
+  const deltaX = dx * MOVE_STEP;
   const deltaY = dy * MOVE_STEP;
   let newX = gameState.player.x + deltaX;
   let newY = gameState.player.y + deltaY;
@@ -381,7 +371,6 @@ function tryMove(dx, dy) {
     if (
       gameState.blue.collected
       && !gameState.levelTwoExitSide
-      && newY > 15
       && Math.abs(newX - 15) > 3
     ) {
       gameState.levelTwoExitSide = newX < 15 ? 'left' : 'right';
