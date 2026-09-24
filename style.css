@@ -112,22 +112,69 @@ body.time-up .game-container {
 }
 
 .timer {
-  min-width: 72px;
-  color: var(--ink);
-  font-size: clamp(25px, 3vw, 38px);
-  font-weight: 300;
-  line-height: 1;
-  letter-spacing: -.05em;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+  --clock-angle: 0deg;
+  --clock-remaining-angle: 360deg;
+  --clock-color: rgba(48, 49, 48, .72);
+  position: relative;
+  width: clamp(40px, 4.8vw, 54px);
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    var(--clock-color) 0deg var(--clock-remaining-angle),
+    rgba(255, 255, 255, .24) var(--clock-remaining-angle) 360deg
+  );
+  box-shadow: 0 1px 3px rgba(48, 49, 48, .12);
+  transition: opacity .2s ease;
+}
+
+.timer.finished { opacity: 0; }
+
+.timer::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background:
+    linear-gradient(var(--quiet), var(--quiet)) center 3px / 1px 4px no-repeat,
+    linear-gradient(var(--quiet), var(--quiet)) center calc(100% - 3px) / 1px 4px no-repeat,
+    linear-gradient(90deg, var(--quiet), var(--quiet)) 3px center / 4px 1px no-repeat,
+    linear-gradient(90deg, var(--quiet), var(--quiet)) calc(100% - 3px) center / 4px 1px no-repeat,
+    var(--ground);
+}
+
+.clock-hand {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: 50%;
+  width: 2px;
+  height: 31%;
+  border-radius: 2px;
+  background: var(--ink);
+  transform: translateX(-50%) rotate(var(--clock-angle));
+  transform-origin: 50% 100%;
+}
+
+.clock-center {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink);
+  transform: translate(-50%, -50%);
 }
 
 .timer.warning {
-  color: #a54c43;
+  --clock-color: rgba(165, 76, 67, .76);
 }
 
 .timer.critical {
-  color: #963b34;
+  --clock-color: rgba(150, 59, 52, .88);
   animation: pulse .5s infinite;
 }
 

@@ -175,6 +175,17 @@ let gameState = {};
 let allPaths = [];
 let gameStarted = false;
 
+function updateClock(remainingMilliseconds, totalMilliseconds) {
+  const remainingRatio = Math.max(0, Math.min(1, remainingMilliseconds / totalMilliseconds));
+  const elapsedAngle = (1 - remainingRatio) * 360;
+  timerEl.style.setProperty('--clock-angle', elapsedAngle + 'deg');
+  timerEl.style.setProperty('--clock-remaining-angle', remainingRatio * 360 + 'deg');
+  timerEl.setAttribute(
+    'aria-label',
+    Math.max(0, Math.ceil(remainingMilliseconds / 1000)) + ' seconds remaining',
+  );
+}
+
 function snapshotGameplayFrame() {
   return {
     player: {
@@ -217,7 +228,8 @@ function resetLevel() {
   recordGameplayFrame(true);
   objectiveEl.textContent = level.name.toLowerCase() + ' · reach the blue octopus';
   statusEl.textContent = 'Hold two arrow keys to move diagonally.';
-  timerEl.textContent = (level.timer / 1000).toFixed(1);
+  updateClock(level.timer, level.timer);
+  timerEl.classList.remove('finished');
   timerEl.classList.remove('warning', 'critical');
   lastTime = Date.now();
 }
@@ -418,7 +430,7 @@ function checkObjectives() {
     } else {
       objectiveEl.textContent = '';
       statusEl.textContent = '';
-      timerEl.textContent = '';
+      timerEl.classList.add('finished');
       setTimeout(startReveal, 1500);
     }
   }
@@ -591,12 +603,16 @@ function updateTimer() {
     }, 220);
     resetLevel();
   } else {
-    timerEl.textContent = (gameState.timer / 1000).toFixed(1);
-    if (gameState.timer < 2000) {
+    updateClock(gameState.timer, LEVELS[currentLevel].timer);
+    const remainingRatio = gameState.timer / LEVELS[currentLevel].timer;
+    if (remainingRatio < .2) {
       timerEl.classList.add('critical');
       timerEl.classList.remove('warning');
-    } else if (gameState.timer < 4000) {
+    } else if (remainingRatio < .4) {
       timerEl.classList.add('warning');
+      timerEl.classList.remove('critical');
+    } else {
+      timerEl.classList.remove('warning', 'critical');
     }
   }
 }
