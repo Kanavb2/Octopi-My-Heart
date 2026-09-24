@@ -16,16 +16,23 @@ const MOVE_STEP = 0.5;
 const MOVE_SPEED = 38; // Half-cell moves preserve the original travel speed with smoother curves.
 const PLAYER_RADIUS = 0.3;
 let CELL_SIZE = 1;
+let VIEW_OFFSET_X = 0;
+let VIEW_OFFSET_Y = 0;
 
 // -- Canvas ----------------------------------------------------------
 function resizeCanvas() {
-  const size = Math.max(220, Math.min(window.innerWidth - 24, window.innerHeight - 24));
-  const pixelRatio = size > 1100 ? 1 : Math.min(window.devicePixelRatio || 1, 2);
-  canvas.style.width = size + 'px';
-  canvas.style.height = size + 'px';
-  canvas.width = Math.round(size * pixelRatio);
-  canvas.height = Math.round(size * pixelRatio);
-  CELL_SIZE = canvas.width / GRID_SIZE;
+  const width = Math.max(320, window.innerWidth);
+  const height = Math.max(320, window.innerHeight);
+  const shortestSide = Math.min(width, height);
+  const pixelRatio = shortestSide > 1100 ? 1 : Math.min(window.devicePixelRatio || 1, 2);
+  canvas.style.width = width + 'px';
+  canvas.style.height = height + 'px';
+  canvas.width = Math.round(width * pixelRatio);
+  canvas.height = Math.round(height * pixelRatio);
+  const worldSize = Math.min(canvas.width, canvas.height);
+  CELL_SIZE = worldSize / GRID_SIZE;
+  VIEW_OFFSET_X = (canvas.width - worldSize) / 2;
+  VIEW_OFFSET_Y = (canvas.height - worldSize) / 2;
 }
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
@@ -130,7 +137,7 @@ const isWallLevel3 = makeCircleCollision(LEVEL_CIRCLES[2]);
 const LEVELS = [
   {
     name: 'Level 1',
-    timer: 6000,
+    timer: 4000,
     playerStart: { x: 15, y: 17.5 },
     blue: { x: 15, y: 27.5 },
     pink: { x: 15, y: 7.5 },
@@ -139,7 +146,7 @@ const LEVELS = [
   },
   {
     name: 'Level 2',
-    timer: 12000,
+    timer: 9000,
     playerStart: { x: 15, y: 25.5 },
     blue: { x: 15, y: 7 },
     pink: { x: 15, y: 25.5 },
@@ -148,7 +155,7 @@ const LEVELS = [
   },
   {
     name: 'Level 3',
-    timer: 12000,
+    timer: 8000,
     playerStart: { x: 3, y: 7.5 },
     blue: { x: 15, y: 27 },
     pink: { x: 27, y: 7.5 },
@@ -578,7 +585,23 @@ function drawGoalHalo(x, y, color) {
 function drawWalkableArea() {
   const level = LEVELS[currentLevel];
   ctx.fillStyle = '#bfc0bd';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE);
+
+  // Treat the extra widescreen space as the continuation of the side walls.
+  // This preserves the original half-circle silhouettes while the canvas fills the viewport.
+  if (VIEW_OFFSET_X > 0) {
+    const leftWall = ctx.createLinearGradient(-VIEW_OFFSET_X, 0, 0, 0);
+    leftWall.addColorStop(0, '#292a29');
+    leftWall.addColorStop(1, '#3a3b3a');
+    ctx.fillStyle = leftWall;
+    ctx.fillRect(-VIEW_OFFSET_X, 0, VIEW_OFFSET_X, GRID_SIZE * CELL_SIZE);
+
+    const rightWall = ctx.createLinearGradient(GRID_SIZE * CELL_SIZE, 0, GRID_SIZE * CELL_SIZE + VIEW_OFFSET_X, 0);
+    rightWall.addColorStop(0, '#3a3b3a');
+    rightWall.addColorStop(1, '#292a29');
+    ctx.fillStyle = rightWall;
+    ctx.fillRect(GRID_SIZE * CELL_SIZE, 0, VIEW_OFFSET_X, GRID_SIZE * CELL_SIZE);
+  }
 
   level.circles.forEach(function (circle) {
     if (circle.invisible) return;
@@ -603,11 +626,11 @@ function drawWalkableArea() {
 }
 
 function render() {
-  CELL_SIZE = canvas.width / GRID_SIZE;
-
   ctx.fillStyle = '#bfc0bd';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  ctx.save();
+  ctx.translate(VIEW_OFFSET_X, VIEW_OFFSET_Y);
   drawWalkableArea();
 
   if (!gameState.blue.collected) {
@@ -620,6 +643,7 @@ function render() {
   }
 
   drawPlayer(gameState.player.x, gameState.player.y, gameState.playerAngle);
+  ctx.restore();
 }
 
 // ====================================================================
@@ -727,7 +751,7 @@ function drawRevealOutlines() {
     if (!isWall) continue;
 
     // Draw walkable cells as subtle fill
-    ctx.fillStyle = '#141414';
+    ctx.fillStyle = 'rgba(48, 49, 48, .1)';
     for (let x = 0; x < GRID_SIZE; x++) {
       for (let y = 0; y < GRID_SIZE; y++) {
         if (!isWall(x + 0.5, y + 0.5)) {
@@ -739,7 +763,7 @@ function drawRevealOutlines() {
     }
 
     // Draw edges where walkable meets wall for a thin outline effect
-    ctx.strokeStyle = '#222222';
+    ctx.strokeStyle = 'rgba(48, 49, 48, .2)';
     ctx.lineWidth = 1;
     for (let x = 0; x < GRID_SIZE; x++) {
       for (let y = 0; y < GRID_SIZE; y++) {
@@ -767,7 +791,7 @@ function drawRevealOutlines() {
 
 function renderReveal() {
   // Background
-  ctx.fillStyle = '#0a0a0a';
+  ctx.fillStyle = '#bfc0bd';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // During fadein, show the last game frame fading out
@@ -776,7 +800,7 @@ function renderReveal() {
     ctx.globalAlpha = Math.max(0, 1 - t);
     render();
     ctx.globalAlpha = 1;
-    ctx.fillStyle = 'rgba(10, 10, 10, ' + Math.min(1, t) + ')';
+    ctx.fillStyle = 'rgba(191, 192, 189, ' + Math.min(1, t) + ')';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     return;
   }
@@ -795,7 +819,7 @@ function renderReveal() {
   }
 
   // Draw accumulated path lines grouped by level
-  const levelColors = ['#ffffff', '#ec4899', '#ffffff'];
+  const levelColors = ['#303130', '#c75482', '#303130'];
   const byLevel = {};
 
   for (let i = 0; i < Math.min(revealProgress, revealFrames.length); i++) {
@@ -842,8 +866,8 @@ function renderReveal() {
     while (idx >= 0 && revealFrames[idx].levelIdx === -1) idx--;
     if (idx >= 0) {
       const f = revealFrames[idx];
-      ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = '#ffffff';
+      ctx.fillStyle = '#303130';
+      ctx.shadowColor = 'rgba(48, 49, 48, .45)';
       ctx.shadowBlur = 12;
       ctx.beginPath();
       ctx.arc(f.px, f.py, 5, 0, Math.PI * 2);
