@@ -233,6 +233,29 @@ body.reveal-complete .final-card {
 
 .replay-label.visible { opacity: 1; }
 
+.audio-toggle {
+  position: absolute;
+  right: clamp(12px, 2vw, 24px);
+  bottom: clamp(12px, 2vh, 22px);
+  z-index: 120;
+  padding: 3px 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: var(--quiet);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: .72;
+}
+
+.audio-toggle:hover,
+.audio-toggle:focus-visible {
+  border-bottom-color: currentColor;
+  color: var(--ink);
+  opacity: 1;
+}
+
 @media (max-width: 600px) {
   .ui-panel { top: 16px; width: calc(100vw - 28px); }
   .title-card { top: 48%; }

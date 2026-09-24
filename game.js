@@ -10,6 +10,7 @@ const statusEl = document.getElementById('status');
 const revealOverlay = document.getElementById('revealOverlay');
 const revealMessage = document.getElementById('revealMessage');
 const shareButton = document.getElementById('shareButton');
+const audioToggle = document.getElementById('audioToggle');
 
 // -- Constants -------------------------------------------------------
 const GRID_SIZE = 30;
@@ -227,6 +228,7 @@ let pointerDirection = { x: 0, y: 0 };
 
 function beginPlaying() {
   if (gameState.state !== 'ready') return;
+  getAudioContext();
   gameStarted = true;
   gameState.state = 'playing';
   lastTime = Date.now();
@@ -257,6 +259,10 @@ window.addEventListener('blur', clearInput);
 document.addEventListener('visibilitychange', function () {
   clearInput();
   lastTime = Date.now();
+  if (audioContext) {
+    if (document.hidden) audioContext.suspend();
+    else audioContext.resume();
+  }
 });
 
 canvas.addEventListener('pointerdown', function (event) {
@@ -384,16 +390,54 @@ function checkObjectives() {
 
 // -- Sounds ----------------------------------------------------------
 let audioContext = null;
+let masterGain = null;
+let musicGain = null;
+let musicInterval = null;
+let musicStep = 0;
+let soundMuted = false;
+
+try {
+  soundMuted = window.localStorage.getItem('octopi-sound-muted') === 'true';
+} catch (_) {}
 
 function getAudioContext() {
   if (!audioContext) {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return null;
     audioContext = new AudioContextClass();
+    masterGain = audioContext.createGain();
+    masterGain.gain.value = soundMuted ? 0 : 1;
+    masterGain.connect(audioContext.destination);
+    musicGain = audioContext.createGain();
+    musicGain.gain.value = 0.16;
+    musicGain.connect(masterGain);
   }
   if (audioContext.state === 'suspended') audioContext.resume();
   return audioContext;
 }
+
+function updateAudioToggle() {
+  audioToggle.textContent = soundMuted ? 'sound off' : 'sound on';
+  audioToggle.setAttribute('aria-pressed', String(soundMuted));
+}
+
+function setSoundMuted(muted) {
+  soundMuted = muted;
+  const context = getAudioContext();
+  if (context && masterGain) {
+    masterGain.gain.setTargetAtTime(muted ? 0 : 1, context.currentTime, 0.025);
+  }
+  try {
+    window.localStorage.setItem('octopi-sound-muted', String(muted));
+  } catch (_) {}
+  updateAudioToggle();
+}
+
+audioToggle.addEventListener('click', function () {
+  setSoundMuted(!soundMuted);
+});
+
+updateAudioToggle();
 
 function playTone(frequency, duration, type, volume, endFrequency) {
   try {
@@ -402,7 +446,7 @@ function playTone(frequency, duration, type, volume, endFrequency) {
     const oscillator = context.createOscillator();
     const gain = context.createGain();
     oscillator.connect(gain);
-    gain.connect(context.destination);
+    gain.connect(masterGain);
     oscillator.type = type;
     oscillator.frequency.setValueAtTime(frequency, context.currentTime);
     if (endFrequency) {
@@ -423,12 +467,65 @@ function playErrorSound() {
   playTone(200, 0.15, 'square', 0.15);
 }
 
-function playRewindSound() {
-  playTone(260, 0.65, 'sine', 0.045, 90);
+function playMusicNote(frequency, duration) {
+  const context = getAudioContext();
+  if (!context || !musicGain) return;
+
+  const noteGain = context.createGain();
+  const fundamental = context.createOscillator();
+  const harmonic = context.createOscillator();
+  const harmonicGain = context.createGain();
+  const now = context.currentTime;
+
+  fundamental.type = 'sine';
+  fundamental.frequency.value = frequency;
+  harmonic.type = 'triangle';
+  harmonic.frequency.value = frequency * 2;
+  harmonic.detune.value = 4;
+  harmonicGain.gain.value = 0.16;
+
+  fundamental.connect(noteGain);
+  harmonic.connect(harmonicGain);
+  harmonicGain.connect(noteGain);
+  noteGain.connect(musicGain);
+  noteGain.gain.setValueAtTime(0.0001, now);
+  noteGain.gain.exponentialRampToValueAtTime(0.11, now + 0.045);
+  noteGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+  fundamental.start(now);
+  harmonic.start(now);
+  fundamental.stop(now + duration);
+  harmonic.stop(now + duration);
 }
 
-function playForwardSound() {
-  playTone(180, 0.5, 'sine', 0.04, 420);
+const REWIND_MELODY = [659.25, 523.25, 440, 392, 329.63, 261.63];
+const FORWARD_MELODY = [
+  261.63, 329.63, 392, 493.88,
+  220, 261.63, 329.63, 392,
+  174.61, 220, 261.63, 329.63,
+  196, 246.94, 293.66, 329.63,
+];
+
+function startReplayMusic(mode) {
+  if (musicInterval) window.clearInterval(musicInterval);
+  const melody = mode === 'rewind' ? REWIND_MELODY : FORWARD_MELODY;
+  const noteDuration = mode === 'rewind' ? 0.62 : 0.9;
+  musicStep = 0;
+  const playNextNote = function () {
+    playMusicNote(melody[musicStep % melody.length], noteDuration);
+    musicStep++;
+  };
+  playNextNote();
+  musicInterval = window.setInterval(playNextNote, mode === 'rewind' ? 250 : 285);
+}
+
+function resolveReplayMusic() {
+  if (musicInterval) window.clearInterval(musicInterval);
+  musicInterval = null;
+  [261.63, 329.63, 392, 493.88, 587.33].forEach(function (frequency, index) {
+    window.setTimeout(function () {
+      playMusicNote(frequency, 2.4);
+    }, index * 55);
+  });
 }
 
 // -- Timer -----------------------------------------------------------
@@ -852,7 +949,7 @@ function updateReveal() {
       revealPhase = 'rewinding';
       revealLastStepTime = now;
       setReplayLabel('rewinding…');
-      playRewindSound();
+      startReplayMusic('rewind');
     }
   } else if (revealPhase === 'rewinding') {
     while (now - revealLastStepTime >= PLAYBACK_INTERVAL) {
@@ -881,7 +978,7 @@ function updateReveal() {
       rebuildPathLayers();
       revealLastStepTime = now;
       setReplayLabel('playing forward…');
-      playForwardSound();
+      startReplayMusic('forward');
     }
   } else if (revealPhase === 'drawing') {
     while (now - revealLastStepTime >= PLAYBACK_INTERVAL) {
@@ -909,7 +1006,10 @@ function updateReveal() {
       revealPhaseStart = now;
     }
   } else if (revealPhase === 'fadeout' && now - revealPhaseStart > 400) {
-    document.body.classList.add('reveal-complete');
+    if (!document.body.classList.contains('reveal-complete')) {
+      document.body.classList.add('reveal-complete');
+      resolveReplayMusic();
+    }
   }
 }
 
