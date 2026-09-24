@@ -99,6 +99,17 @@ body.playing .title-card {
   transform: translate(-50%, -47%) scale(.985);
 }
 
+body.time-up .game-container {
+  animation: time-up-shake .2s ease-out;
+}
+
+@keyframes time-up-shake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-5px, 1px); }
+  45% { transform: translate(4px, -2px); }
+  70% { transform: translate(-2px, 1px); }
+}
+
 .timer {
   min-width: 72px;
   color: var(--ink);
@@ -217,6 +228,7 @@ body.reveal-complete .final-card {
 @media (prefers-reduced-motion: reduce) {
   .title-card, .ui-panel { transition: none; }
   .timer.critical { animation: none; }
+  body.time-up .game-container { animation: none; }
 }
 
 @keyframes fadeIn {

@@ -365,11 +365,14 @@ function updateTimer() {
     gameState.timer = 0;
     gameState.state = 'failed';
     gameState.canMove = false;
-    timerEl.textContent = '0.0';
-    timerEl.classList.add('critical');
-    statusEl.textContent = 'Time\'s up!';
     playErrorSound();
-    setTimeout(resetLevel, 1200);
+    document.body.classList.remove('time-up');
+    void canvas.offsetWidth;
+    document.body.classList.add('time-up');
+    window.setTimeout(function () {
+      document.body.classList.remove('time-up');
+    }, 220);
+    resetLevel();
   } else {
     timerEl.textContent = (gameState.timer / 1000).toFixed(1);
     if (gameState.timer < 2000) {
@@ -656,7 +659,7 @@ let revealFrames = [];
 let revealProgress = 0;
 let revealLastDrawTime = 0;
 let revealSpeed = 20; // ms per point
-let revealPhase = 'fadein'; // 'fadein', 'drawing', 'pause', 'text'
+let revealPhase = 'fadein';
 let revealPhaseStart = 0;
 let revealTransforms = [];
 
@@ -697,13 +700,12 @@ function buildRevealLayout() {
 function buildRevealFrames() {
   revealFrames = [];
 
-  // Process levels in reverse chronological order (last completed first)
-  for (let i = allPaths.length - 1; i >= 0; i--) {
+  // Preserve the order each run happened so the replay draws every shape forward.
+  for (let i = 0; i < allPaths.length; i++) {
     const lp = allPaths[i];
     const t = revealTransforms[i];
-    const reversed = [...lp.path].reverse();
 
-    for (const p of reversed) {
+    for (const p of lp.path) {
       revealFrames.push({
         levelIdx: i,
         px: p.x * t.scale + t.offsetX,
@@ -712,7 +714,7 @@ function buildRevealFrames() {
     }
 
     // Break marker between levels
-    if (i > 0) {
+    if (i < allPaths.length - 1) {
       revealFrames.push({ levelIdx: -1, px: 0, py: 0 });
     }
   }
@@ -722,9 +724,25 @@ function updateReveal() {
   const now = Date.now();
 
   if (revealPhase === 'fadein') {
-    // 1-second fade to black before drawing starts
+    // Pause on the completed run, then show the full recording ready to rewind.
     if (now - revealPhaseStart > 1000) {
+      revealPhase = 'rewinding';
+      revealProgress = revealFrames.length;
+      revealLastDrawTime = now;
+    }
+  } else if (revealPhase === 'rewinding') {
+    while (now - revealLastDrawTime >= revealSpeed && revealProgress > 0) {
+      revealProgress--;
+      revealLastDrawTime += revealSpeed;
+    }
+    if (revealProgress <= 0) {
+      revealPhase = 'rewind-pause';
+      revealPhaseStart = now;
+    }
+  } else if (revealPhase === 'rewind-pause') {
+    if (now - revealPhaseStart > 500) {
       revealPhase = 'drawing';
+      revealProgress = 0;
       revealLastDrawTime = now;
     }
   } else if (revealPhase === 'drawing') {
@@ -867,8 +885,12 @@ function renderReveal() {
     ctx.stroke();
   }
 
-  // Drawing cursor -- small bright dot at the current drawing position
-  if (revealPhase === 'drawing' && revealProgress > 0 && revealProgress <= revealFrames.length) {
+  // Cursor follows both the backwards rewind and the forward replay.
+  if (
+    (revealPhase === 'drawing' || revealPhase === 'rewinding')
+    && revealProgress > 0
+    && revealProgress <= revealFrames.length
+  ) {
     let idx = revealProgress - 1;
     // Skip break markers
     while (idx >= 0 && revealFrames[idx].levelIdx === -1) idx--;
