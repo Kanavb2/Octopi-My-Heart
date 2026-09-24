@@ -811,6 +811,49 @@ function drawRevealOutlines() {
   }
 }
 
+function drawRewindActors() {
+  const previousCellSize = CELL_SIZE;
+
+  // Keep both octopi visible in every level while the submarine retraces the run.
+  revealTransforms.forEach(function (transform, levelIndex) {
+    const level = LEVELS[levelIndex];
+    ctx.save();
+    ctx.translate(transform.offsetX, transform.offsetY);
+    CELL_SIZE = transform.scale;
+    drawOctopus(level.blue.x, level.blue.y, '#6496dc');
+    drawOctopus(level.pink.x, level.pink.y, '#df7fa7');
+    ctx.restore();
+  });
+
+  let frameIndex = revealPhase === 'rewind-pause' ? 0 : revealProgress - 1;
+  while (frameIndex >= 0 && revealFrames[frameIndex].levelIdx === -1) frameIndex--;
+
+  if (frameIndex >= 0) {
+    const frame = revealFrames[frameIndex];
+    const transform = revealTransforms[frame.levelIdx];
+    let previousFrameIndex = frameIndex - 1;
+    while (previousFrameIndex >= 0 && revealFrames[previousFrameIndex].levelIdx === -1) {
+      previousFrameIndex--;
+    }
+    const previousFrame = revealFrames[previousFrameIndex];
+    const angle = previousFrame && previousFrame.levelIdx === frame.levelIdx
+      ? Math.atan2(previousFrame.py - frame.py, previousFrame.px - frame.px)
+      : 0;
+
+    ctx.save();
+    ctx.translate(transform.offsetX, transform.offsetY);
+    CELL_SIZE = transform.scale;
+    drawPlayer(
+      (frame.px - transform.offsetX) / transform.scale,
+      (frame.py - transform.offsetY) / transform.scale,
+      angle,
+    );
+    ctx.restore();
+  }
+
+  CELL_SIZE = previousCellSize;
+}
+
 function renderReveal() {
   // Background
   ctx.fillStyle = '#bfc0bd';
@@ -848,11 +891,13 @@ function renderReveal() {
   );
   const byLevel = {};
 
-  for (let i = 0; i < Math.min(revealProgress, revealFrames.length); i++) {
-    const f = revealFrames[i];
-    if (f.levelIdx === -1) continue;
-    if (!byLevel[f.levelIdx]) byLevel[f.levelIdx] = [];
-    byLevel[f.levelIdx].push(f);
+  if (revealPhase !== 'rewinding' && revealPhase !== 'rewind-pause') {
+    for (let i = 0; i < Math.min(revealProgress, revealFrames.length); i++) {
+      const f = revealFrames[i];
+      if (f.levelIdx === -1) continue;
+      if (!byLevel[f.levelIdx]) byLevel[f.levelIdx] = [];
+      byLevel[f.levelIdx].push(f);
+    }
   }
 
   for (const lvl in byLevel) {
@@ -885,12 +930,12 @@ function renderReveal() {
     ctx.stroke();
   }
 
-  // Cursor follows both the backwards rewind and the forward replay.
-  if (
-    (revealPhase === 'drawing' || revealPhase === 'rewinding')
-    && revealProgress > 0
-    && revealProgress <= revealFrames.length
-  ) {
+  if (revealPhase === 'rewinding' || revealPhase === 'rewind-pause') {
+    drawRewindActors();
+  }
+
+  // The forward pass is the first time the hidden shapes are drawn.
+  if (revealPhase === 'drawing' && revealProgress > 0 && revealProgress <= revealFrames.length) {
     let idx = revealProgress - 1;
     // Skip break markers
     while (idx >= 0 && revealFrames[idx].levelIdx === -1) idx--;
