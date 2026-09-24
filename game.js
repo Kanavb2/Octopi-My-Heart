@@ -223,8 +223,8 @@ function resetLevel() {
 
 // -- Input -----------------------------------------------------------
 const keys = {};
-let pointerOrigin = null;
-let pointerDirection = { x: 0, y: 0 };
+const touchDirections = { up: false, down: false, left: false, right: false };
+const dpadButtons = document.querySelectorAll('.mobile-dpad button');
 
 function beginPlaying() {
   if (gameState.state !== 'ready') return;
@@ -251,8 +251,10 @@ window.addEventListener('keyup', (e) => {
 
 function clearInput() {
   Object.keys(keys).forEach(function (key) { keys[key] = false; });
-  pointerOrigin = null;
-  pointerDirection = { x: 0, y: 0 };
+  Object.keys(touchDirections).forEach(function (direction) {
+    touchDirections[direction] = false;
+  });
+  dpadButtons.forEach(function (button) { button.classList.remove('active'); });
 }
 
 window.addEventListener('blur', clearInput);
@@ -265,27 +267,25 @@ document.addEventListener('visibilitychange', function () {
   }
 });
 
-canvas.addEventListener('pointerdown', function (event) {
-  if (revealActive) return;
-  pointerOrigin = { x: event.clientX, y: event.clientY };
-  pointerDirection = { x: 0, y: 0 };
-  canvas.setPointerCapture(event.pointerId);
-  beginPlaying();
-});
-
-canvas.addEventListener('pointermove', function (event) {
-  if (!pointerOrigin) return;
-  const deltaX = event.clientX - pointerOrigin.x;
-  const deltaY = event.clientY - pointerOrigin.y;
-  const deadZone = 8;
-  pointerDirection = {
-    x: Math.abs(deltaX) > deadZone ? Math.sign(deltaX) : 0,
-    y: Math.abs(deltaY) > deadZone ? Math.sign(deltaY) : 0,
+dpadButtons.forEach(function (button) {
+  const direction = button.dataset.direction;
+  const release = function () {
+    touchDirections[direction] = false;
+    button.classList.remove('active');
   };
-});
 
-canvas.addEventListener('pointerup', clearInput);
-canvas.addEventListener('pointercancel', clearInput);
+  button.addEventListener('pointerdown', function (event) {
+    event.preventDefault();
+    if (revealActive) return;
+    button.setPointerCapture(event.pointerId);
+    touchDirections[direction] = true;
+    button.classList.add('active');
+    beginPlaying();
+  });
+  button.addEventListener('pointerup', release);
+  button.addEventListener('pointercancel', release);
+  button.addEventListener('lostpointercapture', release);
+});
 
 // -- Movement --------------------------------------------------------
 function tryMove(dx, dy) {
@@ -853,6 +853,7 @@ function setReplayLabel(text) {
 
 function startReveal() {
   revealActive = true;
+  document.body.classList.add('replaying');
   revealPhase = 'fadein';
   revealPhaseStart = Date.now();
   revealLevelIndex = allPaths.length - 1;
@@ -1181,10 +1182,10 @@ function gameLoop() {
   if (keys['ArrowDown']) dy += 1;
   if (keys['ArrowLeft']) dx -= 1;
   if (keys['ArrowRight']) dx += 1;
-  if (dx === 0 && dy === 0) {
-    dx = pointerDirection.x;
-    dy = pointerDirection.y;
-  }
+  if (touchDirections.up) dy -= 1;
+  if (touchDirections.down) dy += 1;
+  if (touchDirections.left) dx -= 1;
+  if (touchDirections.right) dx += 1;
   if (dx !== 0 || dy !== 0) tryMove(dx, dy);
 
   updateTimer();
@@ -1195,7 +1196,7 @@ function gameLoop() {
 
 // -- Start -----------------------------------------------------------
 if (window.matchMedia('(pointer: coarse)').matches) {
-  document.getElementById('moveHint').textContent = 'drag anywhere to move';
+  document.getElementById('moveHint').textContent = 'use the arrow keys to move';
 }
 resetLevel();
 gameLoop();

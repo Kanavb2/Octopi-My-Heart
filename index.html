@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>octopi my heart</title>
-  <link rel="stylesheet" href="style.css?v=14">
+  <link rel="stylesheet" href="style.css?v=16">
 </head>
 <body>
   <div class="game-container">
@@ -21,6 +21,12 @@
     </div>
     <canvas id="gameCanvas"></canvas>
     <button class="audio-toggle" id="audioToggle" type="button" aria-pressed="false">sound on</button>
+    <div class="mobile-dpad" id="mobileDpad" aria-label="Movement controls">
+      <button class="dpad-up" type="button" data-direction="up" aria-label="Move up">↑</button>
+      <button class="dpad-left" type="button" data-direction="left" aria-label="Move left">←</button>
+      <button class="dpad-down" type="button" data-direction="down" aria-label="Move down">↓</button>
+      <button class="dpad-right" type="button" data-direction="right" aria-label="Move right">→</button>
+    </div>
     <div class="replay-label" id="replayLabel" aria-live="polite"></div>
     <div class="final-card" id="finalCard" aria-live="polite">
       <p>you octopi my heart.</p>
@@ -30,6 +36,6 @@
       <div class="reveal-message" id="revealMessage"></div>
     </div>
   </div>
-  <script src="game.js?v=15"></script>
+  <script src="game.js?v=16"></script>
 </body>
 </html>

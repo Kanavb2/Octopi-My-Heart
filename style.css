@@ -257,6 +257,56 @@ body.reveal-complete .final-card {
   opacity: 1;
 }
 
+.mobile-dpad { display: none; }
+
+@media (hover: none) and (pointer: coarse) {
+  .mobile-dpad {
+    position: absolute;
+    right: 14px;
+    bottom: max(14px, env(safe-area-inset-bottom));
+    z-index: 115;
+    display: grid;
+    grid-template-columns: repeat(3, 36px);
+    grid-template-rows: repeat(2, 36px);
+    gap: 4px;
+    transition: opacity .2s ease;
+    touch-action: none;
+  }
+
+  .mobile-dpad button {
+    border: 1px solid rgba(48, 49, 48, .3);
+    border-radius: 7px;
+    color: var(--ink);
+    background: rgba(255, 255, 255, .38);
+    box-shadow: 0 2px 5px rgba(48, 49, 48, .08);
+    font: 500 19px/1 "Helvetica Neue", Helvetica, Arial, sans-serif;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .mobile-dpad button.active {
+    background: rgba(48, 49, 48, .16);
+    transform: translateY(1px);
+  }
+
+  .dpad-up { grid-column: 2; grid-row: 1; }
+  .dpad-left { grid-column: 1; grid-row: 2; }
+  .dpad-down { grid-column: 2; grid-row: 2; }
+  .dpad-right { grid-column: 3; grid-row: 2; }
+
+  body.replaying .mobile-dpad {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .audio-toggle {
+    right: auto;
+    left: 14px;
+    bottom: max(14px, env(safe-area-inset-bottom));
+  }
+}
+
 @media (max-width: 600px) {
   .ui-panel { top: 16px; width: calc(100vw - 28px); }
   .title-card { top: 48%; }
