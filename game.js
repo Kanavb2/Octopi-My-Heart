@@ -11,6 +11,7 @@ const revealOverlay = document.getElementById('revealOverlay');
 const revealMessage = document.getElementById('revealMessage');
 const shareButton = document.getElementById('shareButton');
 const audioToggle = document.getElementById('audioToggle');
+const mobileDpad = document.getElementById('mobileDpad');
 
 // -- Constants -------------------------------------------------------
 const GRID_SIZE = 30;
@@ -267,24 +268,49 @@ document.addEventListener('visibilitychange', function () {
   }
 });
 
-dpadButtons.forEach(function (button) {
-  const direction = button.dataset.direction;
-  const release = function () {
+function syncDpadTouches(touches) {
+  Object.keys(touchDirections).forEach(function (direction) {
     touchDirections[direction] = false;
-    button.classList.remove('active');
-  };
+  });
+  dpadButtons.forEach(function (button) { button.classList.remove('active'); });
+  if (revealActive) return;
 
-  button.addEventListener('pointerdown', function (event) {
+  let hasDirection = false;
+  Array.from(touches).forEach(function (touch) {
+    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+    const button = target && target.closest('.mobile-dpad button');
+    if (!button || !mobileDpad.contains(button)) return;
+    touchDirections[button.dataset.direction] = true;
+    button.classList.add('active');
+    hasDirection = true;
+  });
+  if (hasDirection) beginPlaying();
+}
+
+['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(function (eventName) {
+  mobileDpad.addEventListener(eventName, function (event) {
     event.preventDefault();
-    if (revealActive) return;
-    button.setPointerCapture(event.pointerId);
-    touchDirections[direction] = true;
+    syncDpadTouches(event.touches);
+  }, { passive: false });
+});
+
+// Keep mouse and stylus input useful when mobile emulation is enabled on desktop.
+dpadButtons.forEach(function (button) {
+  button.addEventListener('pointerdown', function (event) {
+    if (event.pointerType === 'touch' || revealActive) return;
+    event.preventDefault();
+    touchDirections[button.dataset.direction] = true;
     button.classList.add('active');
     beginPlaying();
   });
-  button.addEventListener('pointerup', release);
-  button.addEventListener('pointercancel', release);
-  button.addEventListener('lostpointercapture', release);
+  const releasePointer = function (event) {
+    if (event.pointerType === 'touch') return;
+    touchDirections[button.dataset.direction] = false;
+    button.classList.remove('active');
+  };
+  button.addEventListener('pointerup', releasePointer);
+  button.addEventListener('pointercancel', releasePointer);
+  button.addEventListener('pointerleave', releasePointer);
 });
 
 // -- Movement --------------------------------------------------------
