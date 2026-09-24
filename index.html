@@ -4,20 +4,26 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>octopi my heart</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
   <div class="game-container">
+    <div class="title-card" id="titleCard">
+      <h1>octopi <em>my</em> heart</h1>
+      <div><span>press arrow keys to move</span><span>three tiny levels</span></div>
+    </div>
     <div class="ui-panel">
-      <div class="timer" id="timer">8.0</div>
-      <div class="objective" id="objective">Reach Octopus A</div>
-      <div class="status" id="status"></div>
+      <div class="level-copy">
+        <div class="objective" id="objective">Reach the blue octopus</div>
+        <div class="status" id="status"></div>
+      </div>
+      <div class="timer" id="timer">6.0</div>
     </div>
     <canvas id="gameCanvas"></canvas>
     <div class="reveal-overlay" id="revealOverlay">
       <div class="reveal-message" id="revealMessage"></div>
     </div>
   </div>
-  <script src="game.js"></script>
+  <script src="game.js?v=2"></script>
 </body>
 </html>

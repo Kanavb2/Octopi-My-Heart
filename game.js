@@ -19,9 +19,12 @@ let CELL_SIZE = 1;
 
 // -- Canvas ----------------------------------------------------------
 function resizeCanvas() {
-  const size = Math.min(window.innerWidth - 40, window.innerHeight - 40, 800);
-  canvas.width = size;
-  canvas.height = size;
+  const size = Math.max(280, Math.min(window.innerWidth - 24, window.innerHeight - 24, 840));
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.style.width = size + 'px';
+  canvas.style.height = size + 'px';
+  canvas.width = Math.round(size * pixelRatio);
+  canvas.height = Math.round(size * pixelRatio);
   CELL_SIZE = canvas.width / GRID_SIZE;
 }
 resizeCanvas();
@@ -111,6 +114,7 @@ let currentLevel = 0;
 let lastTime = Date.now();
 let gameState = {};
 let allPaths = [];
+let gameStarted = false;
 
 function resetLevel() {
   const level = LEVELS[currentLevel];
@@ -120,14 +124,14 @@ function resetLevel() {
     pink: { ...level.pink, collected: false },
     path: [],
     timer: level.timer,
-    state: 'playing',
+    state: gameStarted ? 'playing' : 'ready',
     lastMoveTime: 0,
     canMove: true,
     levelTwoEntrySide: null,
     levelTwoExitSide: null,
   };
   gameState.path.push({ ...gameState.player });
-  objectiveEl.textContent = level.name + ': Reach the blue octopus';
+  objectiveEl.textContent = level.name.toLowerCase() + ' · reach the blue octopus';
   statusEl.textContent = 'Hold two arrow keys to move diagonally.';
   timerEl.textContent = (level.timer / 1000).toFixed(1);
   timerEl.classList.remove('warning', 'critical');
@@ -140,6 +144,12 @@ window.addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
     e.preventDefault();
     keys[e.key] = true;
+    if (gameState.state === 'ready') {
+      gameStarted = true;
+      gameState.state = 'playing';
+      lastTime = Date.now();
+      document.body.classList.add('playing');
+    }
     const dx = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0);
     const dy = (keys.ArrowDown ? 1 : 0) - (keys.ArrowUp ? 1 : 0);
     tryMove(dx, dy);
@@ -201,7 +211,7 @@ function checkObjectives() {
 
   if (!b.collected && Math.hypot(p.x - b.x, p.y - b.y) <= 0.6) {
     b.collected = true;
-    objectiveEl.textContent = LEVELS[currentLevel].name + ': Now reach the pink octopus!';
+    objectiveEl.textContent = LEVELS[currentLevel].name.toLowerCase() + ' · now reach the pink octopus';
     playCollectSound(600);
   }
 
@@ -305,12 +315,13 @@ function drawOctopus(x, y, color) {
   const py = y * CELL_SIZE;
   const r = CELL_SIZE * 0.62;
   const now = performance.now();
-  const phase = color === '#3b82f6' ? 0 : Math.PI;
+  const isBlue = color === '#6496dc';
+  const phase = isBlue ? 0 : Math.PI;
   const bob = Math.sin(now / 420 + phase) * r * 0.08;
   const sway = Math.sin(now / 650 + phase) * 0.035;
   const blinkTime = (now + (phase ? 1100 : 0)) % 3600;
   const eyeHeight = blinkTime > 3440 ? 0.12 : 1;
-  const outline = color === '#3b82f6' ? '#1d4ed8' : '#be185d';
+  const outline = isBlue ? '#3f70b5' : '#b6537d';
 
   ctx.save();
   ctx.translate(px, py + bob);
@@ -389,48 +400,82 @@ function drawPlayer(x, y) {
   const py = y * CELL_SIZE;
   const r = CELL_SIZE * 0.3;
 
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = 'rgba(48, 49, 48, .18)';
+  ctx.beginPath();
+  ctx.ellipse(px, py + r * 1.7, r * 1.15, r * .38, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#fffdfa';
+  ctx.strokeStyle = '#303130';
+  ctx.lineWidth = Math.max(1.5, r * .14);
   ctx.beginPath();
   ctx.arc(px, py, r, 0, Math.PI * 2);
   ctx.fill();
+  ctx.stroke();
 
-  ctx.fillStyle = '#94a3b8';
+  ctx.fillStyle = '#303130';
   ctx.beginPath();
-  ctx.arc(px, py - r * 0.3, r * 0.15, 0, Math.PI * 2);
+  ctx.arc(px, py, r * 0.16, 0, Math.PI * 2);
   ctx.fill();
+}
+
+function drawGoalHalo(x, y, color) {
+  const pulse = (Math.sin(performance.now() / 360) + 1) / 2;
+  const px = x * CELL_SIZE;
+  const py = y * CELL_SIZE;
+  const radius = CELL_SIZE * (1.02 + pulse * .12);
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = .34 - pulse * .12;
+  ctx.lineWidth = Math.max(1.5, CELL_SIZE * .07);
+  ctx.beginPath();
+  ctx.arc(px, py, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawWalkableArea() {
   const level = LEVELS[currentLevel];
-  ctx.fillStyle = '#171717';
+  ctx.fillStyle = '#bfc0bd';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.fillStyle = '#050505';
   level.circles.forEach(function (circle) {
     if (circle.invisible) return;
+    const px = circle.x * CELL_SIZE;
+    const py = circle.y * CELL_SIZE;
+    const radius = circle.radius * CELL_SIZE;
+    const gradient = ctx.createRadialGradient(
+      px - radius * .2,
+      py - radius * .25,
+      radius * .08,
+      px,
+      py,
+      radius,
+    );
+    gradient.addColorStop(0, '#3a3b3a');
+    gradient.addColorStop(1, '#292a29');
+    ctx.fillStyle = gradient;
     ctx.beginPath();
-    ctx.arc(circle.x * CELL_SIZE, circle.y * CELL_SIZE, circle.radius * CELL_SIZE, 0, Math.PI * 2);
+    ctx.arc(px, py, radius, 0, Math.PI * 2);
     ctx.fill();
   });
-
-  ctx.strokeStyle = '#333333';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
 }
 
 function render() {
   CELL_SIZE = canvas.width / GRID_SIZE;
 
-  ctx.fillStyle = '#0a0a0a';
+  ctx.fillStyle = '#bfc0bd';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   drawWalkableArea();
 
   if (!gameState.blue.collected) {
-    drawOctopus(gameState.blue.x, gameState.blue.y, '#3b82f6');
+    if (!gameState.blue.collected) drawGoalHalo(gameState.blue.x, gameState.blue.y, '#4f82ca');
+    drawOctopus(gameState.blue.x, gameState.blue.y, '#6496dc');
   }
   if (!gameState.pink.collected) {
-    drawOctopus(gameState.pink.x, gameState.pink.y, '#ec4899');
+    if (gameState.blue.collected) drawGoalHalo(gameState.pink.x, gameState.pink.y, '#cb638f');
+    drawOctopus(gameState.pink.x, gameState.pink.y, '#df7fa7');
   }
 
   drawPlayer(gameState.player.x, gameState.player.y);
