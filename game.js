@@ -1,5 +1,5 @@
 // ===================================================================
-// Game: Octopi My Heart
+// Game: octopi my heart
 // ===================================================================
 
 const canvas = document.getElementById('gameCanvas');

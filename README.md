@@ -1,4 +1,4 @@
-# Octopi My Heart
+# octopi my heart
 
 Level geometry is adapted from Nicky Case's CC0 game
 [it's a(door)able](https://ncase.me/door/), with original characters and presentation.
