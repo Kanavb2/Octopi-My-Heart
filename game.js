@@ -19,8 +19,8 @@ let CELL_SIZE = 1;
 
 // -- Canvas ----------------------------------------------------------
 function resizeCanvas() {
-  const size = Math.max(280, Math.min(window.innerWidth - 24, window.innerHeight - 24, 840));
-  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  const size = Math.max(220, Math.min(window.innerWidth - 24, window.innerHeight - 24));
+  const pixelRatio = size > 1100 ? 1 : Math.min(window.devicePixelRatio || 1, 2);
   canvas.style.width = size + 'px';
   canvas.style.height = size + 'px';
   canvas.width = Math.round(size * pixelRatio);
@@ -75,6 +75,54 @@ function isMovementBlocked(level, startX, startY, endX, endY) {
   });
 }
 
+function slideAlongCircle(level, startX, startY, deltaX, deltaY) {
+  const blockingCircles = level.circles.filter(function (circle) {
+    return movementHitsCircle(startX, startY, startX + deltaX, startY + deltaY, circle);
+  });
+  let bestCandidate = null;
+  let bestDistance = 0;
+
+  blockingCircles.forEach(function (circle) {
+    const offsetX = startX - circle.x;
+    const offsetY = startY - circle.y;
+    const offsetLength = Math.hypot(offsetX, offsetY);
+    if (offsetLength === 0) return;
+
+    const normalX = offsetX / offsetLength;
+    const normalY = offsetY / offsetLength;
+    const inwardAmount = deltaX * normalX + deltaY * normalY;
+    const tangentX = deltaX - inwardAmount * normalX;
+    const tangentY = deltaY - inwardAmount * normalY;
+    const tangentDistance = Math.hypot(tangentX, tangentY);
+    if (tangentDistance < 0.001) return;
+
+    let candidateX = startX + tangentX;
+    let candidateY = startY + tangentY;
+    const safeRadius = circle.radius + PLAYER_RADIUS + 0.002;
+    const candidateOffsetX = candidateX - circle.x;
+    const candidateOffsetY = candidateY - circle.y;
+    const candidateRadius = Math.hypot(candidateOffsetX, candidateOffsetY);
+    if (candidateRadius < safeRadius) {
+      candidateX = circle.x + (candidateOffsetX / candidateRadius) * safeRadius;
+      candidateY = circle.y + (candidateOffsetY / candidateRadius) * safeRadius;
+    }
+
+    if (
+      candidateX < PLAYER_RADIUS || candidateX > GRID_SIZE - PLAYER_RADIUS
+      || candidateY < PLAYER_RADIUS || candidateY > GRID_SIZE - PLAYER_RADIUS
+      || isMovementBlocked(level, startX, startY, candidateX, candidateY)
+      || level.isWall(candidateX, candidateY)
+    ) return;
+
+    if (tangentDistance > bestDistance) {
+      bestDistance = tangentDistance;
+      bestCandidate = { x: candidateX, y: candidateY };
+    }
+  });
+
+  return bestCandidate;
+}
+
 const isWallLevel1 = makeCircleCollision(LEVEL_CIRCLES[0]);
 const isWallLevel2 = makeCircleCollision(LEVEL_CIRCLES[1]);
 const isWallLevel3 = makeCircleCollision(LEVEL_CIRCLES[2]);
@@ -120,6 +168,10 @@ function resetLevel() {
   const level = LEVELS[currentLevel];
   gameState = {
     player: { ...level.playerStart },
+    playerAngle: Math.atan2(
+      level.blue.y - level.playerStart.y,
+      level.blue.x - level.playerStart.x,
+    ),
     blue: { ...level.blue, collected: false },
     pink: { ...level.pink, collected: false },
     path: [],
@@ -166,21 +218,33 @@ function tryMove(dx, dy) {
   const now = Date.now();
   if (now - gameState.lastMoveTime < MOVE_SPEED) return;
 
-  const newX = gameState.player.x + dx * MOVE_STEP;
-  const newY = gameState.player.y + dy * MOVE_STEP;
+  const deltaX = dx * MOVE_STEP;
+  const deltaY = dy * MOVE_STEP;
+  let newX = gameState.player.x + deltaX;
+  let newY = gameState.player.y + deltaY;
 
   if (
     newX < PLAYER_RADIUS || newX > GRID_SIZE - PLAYER_RADIUS
     || newY < PLAYER_RADIUS || newY > GRID_SIZE - PLAYER_RADIUS
   ) return;
-  if (isMovementBlocked(
-    LEVELS[currentLevel],
-    gameState.player.x,
-    gameState.player.y,
-    newX,
-    newY,
-  )) return;
+  const level = LEVELS[currentLevel];
+  if (isMovementBlocked(level, gameState.player.x, gameState.player.y, newX, newY)) {
+    const slideTarget = slideAlongCircle(
+      level,
+      gameState.player.x,
+      gameState.player.y,
+      deltaX,
+      deltaY,
+    );
+    if (!slideTarget) return;
+    newX = slideTarget.x;
+    newY = slideTarget.y;
+  }
 
+  gameState.playerAngle = Math.atan2(
+    newY - gameState.player.y,
+    newX - gameState.player.x,
+  );
   gameState.player.x = newX;
   gameState.player.y = newY;
   gameState.lastMoveTime = now;
@@ -313,110 +377,187 @@ function updateTimer() {
 function drawOctopus(x, y, color) {
   const px = x * CELL_SIZE;
   const py = y * CELL_SIZE;
-  const r = CELL_SIZE * 0.62;
+  const r = CELL_SIZE * 0.68;
   const now = performance.now();
   const isBlue = color === '#6496dc';
   const phase = isBlue ? 0 : Math.PI;
-  const bob = Math.sin(now / 420 + phase) * r * 0.08;
-  const sway = Math.sin(now / 650 + phase) * 0.035;
+  const bob = Math.sin(now / 520 + phase) * r * 0.055;
+  const sway = Math.sin(now / 760 + phase) * 0.025;
   const blinkTime = (now + (phase ? 1100 : 0)) % 3600;
-  const eyeHeight = blinkTime > 3440 ? 0.12 : 1;
-  const outline = isBlue ? '#3f70b5' : '#b6537d';
+  const eyeHeight = blinkTime > 3450 ? 0.13 : 1;
+  const outline = isBlue ? '#426c9e' : '#99506d';
+  const lightColor = isBlue ? '#91b9eb' : '#f0a7c2';
+  const cheekColor = isBlue ? 'rgba(244, 174, 188, .7)' : 'rgba(255, 197, 206, .78)';
 
   ctx.save();
   ctx.translate(px, py + bob);
   ctx.rotate(sway);
 
-  // Soft grounded shadow keeps the bob subtle rather than floaty.
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+  ctx.fillStyle = 'rgba(39, 40, 39, .18)';
   ctx.beginPath();
-  ctx.ellipse(0, r * 1.08 - bob, r * 0.76, r * 0.2, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, r * 1.02 - bob, r * .75, r * .16, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Four short tentacles with a very small idle wave.
+  // Soft side arms give the silhouette some life without looking spidery.
   ctx.strokeStyle = outline;
-  ctx.lineWidth = r * 0.25;
+  ctx.lineWidth = r * .28;
   ctx.lineCap = 'round';
-  for (let i = 0; i < 4; i++) {
-    const startX = (-0.62 + i * 0.41) * r;
-    const wave = Math.sin(now / 300 + i * 1.4 + phase) * r * 0.09;
+  for (const side of [-1, 1]) {
+    const wave = Math.sin(now / 420 + side + phase) * r * .08;
     ctx.beginPath();
-    ctx.moveTo(startX, r * 0.42);
-    ctx.quadraticCurveTo(startX + wave, r * 0.78, startX - wave * 0.45, r * 0.98);
+    ctx.moveTo(side * r * .64, r * .35);
+    ctx.quadraticCurveTo(side * r * 1.03, r * .58 + wave, side * r * .9, r * .82);
     ctx.stroke();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = r * .16;
+    ctx.stroke();
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = r * .28;
   }
 
-  // Rounded chibi head: wider at the cheeks and slightly flat underneath.
-  ctx.fillStyle = color;
+  // Rounded tentacle lobes read as a single soft skirt.
+  for (let i = 0; i < 5; i++) {
+    const tentacleX = (-.58 + i * .29) * r;
+    const tentacleBob = Math.sin(now / 390 + i * 1.1 + phase) * r * .035;
+    ctx.fillStyle = outline;
+    ctx.beginPath();
+    ctx.ellipse(tentacleX, r * .66 + tentacleBob, r * .2, r * .34, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(tentacleX, r * .62 + tentacleBob, r * .13, r * .25, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const headGradient = ctx.createRadialGradient(-r * .28, -r * .48, r * .08, 0, 0, r * 1.15);
+  headGradient.addColorStop(0, lightColor);
+  headGradient.addColorStop(1, color);
+  ctx.fillStyle = headGradient;
   ctx.strokeStyle = outline;
-  ctx.lineWidth = Math.max(1.2, r * 0.1);
+  ctx.lineWidth = Math.max(1.2, r * .075);
   ctx.beginPath();
-  ctx.moveTo(-r * 0.82, r * 0.34);
-  ctx.bezierCurveTo(-r * 0.98, -r * 0.2, -r * 0.62, -r * 0.92, 0, -r * 0.96);
-  ctx.bezierCurveTo(r * 0.62, -r * 0.92, r * 0.98, -r * 0.2, r * 0.82, r * 0.34);
-  ctx.quadraticCurveTo(r * 0.58, r * 0.64, 0, r * 0.62);
-  ctx.quadraticCurveTo(-r * 0.58, r * 0.64, -r * 0.82, r * 0.34);
+  ctx.moveTo(-r * .78, r * .4);
+  ctx.bezierCurveTo(-r * .94, -r * .13, -r * .62, -r * .88, 0, -r * .92);
+  ctx.bezierCurveTo(r * .62, -r * .88, r * .94, -r * .13, r * .78, r * .4);
+  ctx.quadraticCurveTo(r * .52, r * .6, 0, r * .57);
+  ctx.quadraticCurveTo(-r * .52, r * .6, -r * .78, r * .4);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
 
-  // Small highlight, eyes, blush, and a tiny smile.
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.24)';
+  ctx.fillStyle = 'rgba(255, 255, 255, .32)';
   ctx.beginPath();
-  ctx.ellipse(-r * 0.34, -r * 0.58, r * 0.2, r * 0.1, -0.45, 0, Math.PI * 2);
+  ctx.ellipse(-r * .32, -r * .59, r * .22, r * .1, -.45, 0, Math.PI * 2);
   ctx.fill();
 
-  for (const eyeX of [-0.3, 0.3]) {
+  for (const eyeX of [-.27, .27]) {
     ctx.save();
-    ctx.translate(r * eyeX, -r * 0.2);
+    ctx.translate(r * eyeX, -r * .16);
     ctx.scale(1, eyeHeight);
+    ctx.fillStyle = '#fffdf8';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * .2, r * .25, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#26313a';
+    ctx.beginPath();
+    ctx.arc(r * .015, r * .015, r * .105, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.ellipse(0, 0, r * 0.18, r * 0.23, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#17221d';
-    ctx.beginPath();
-    ctx.arc(r * 0.02, r * 0.02, r * 0.08, 0, Math.PI * 2);
+    ctx.arc(-r * .025, -r * .035, r * .035, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
 
-  ctx.fillStyle = 'rgba(255, 190, 205, 0.72)';
+  ctx.fillStyle = cheekColor;
   ctx.beginPath();
-  ctx.arc(-r * 0.58, r * 0.12, r * 0.11, 0, Math.PI * 2);
-  ctx.arc(r * 0.58, r * 0.12, r * 0.11, 0, Math.PI * 2);
+  ctx.ellipse(-r * .55, r * .14, r * .12, r * .07, 0, 0, Math.PI * 2);
+  ctx.ellipse(r * .55, r * .14, r * .12, r * .07, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = '#17221d';
-  ctx.lineWidth = Math.max(1, r * 0.07);
+  ctx.strokeStyle = '#26313a';
+  ctx.lineWidth = Math.max(1, r * .055);
+  ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.arc(0, r * 0.08, r * 0.17, 0.16 * Math.PI, 0.84 * Math.PI);
+  ctx.arc(0, r * .11, r * .15, .14 * Math.PI, .86 * Math.PI);
   ctx.stroke();
   ctx.restore();
 }
 
-function drawPlayer(x, y) {
+function drawPlayer(x, y, angle) {
   const px = x * CELL_SIZE;
   const py = y * CELL_SIZE;
-  const r = CELL_SIZE * 0.3;
+  const r = CELL_SIZE * .38;
+  const now = performance.now();
 
   ctx.fillStyle = 'rgba(48, 49, 48, .18)';
   ctx.beginPath();
-  ctx.ellipse(px, py + r * 1.7, r * 1.15, r * .38, 0, 0, Math.PI * 2);
+  ctx.ellipse(px, py + r * 1.5, r * 1.25, r * .34, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = '#fffdfa';
-  ctx.strokeStyle = '#303130';
-  ctx.lineWidth = Math.max(1.5, r * .14);
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.rotate(angle);
+
+  // Propeller and tail sit behind the body.
+  ctx.strokeStyle = '#655431';
+  ctx.lineWidth = Math.max(1, r * .1);
   ctx.beginPath();
-  ctx.arc(px, py, r, 0, Math.PI * 2);
+  ctx.moveTo(-r * 1.08, 0);
+  ctx.lineTo(-r * 1.38, 0);
+  ctx.stroke();
+  ctx.save();
+  ctx.translate(-r * 1.42, 0);
+  ctx.rotate(now / 85);
+  ctx.fillStyle = '#df9360';
+  ctx.beginPath();
+  ctx.ellipse(0, -r * .22, r * .1, r * .28, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, r * .22, r * .1, r * .28, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = '#d7a943';
+  ctx.strokeStyle = '#655431';
+  ctx.lineWidth = Math.max(1.2, r * .095);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, r * 1.18, r * .62, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 
-  ctx.fillStyle = '#303130';
+  ctx.fillStyle = '#f2cf68';
   ctx.beginPath();
-  ctx.arc(px, py, r * 0.16, 0, Math.PI * 2);
+  ctx.ellipse(r * .67, -r * .08, r * .46, r * .45, 0, 0, Math.PI * 2);
   ctx.fill();
+
+  ctx.fillStyle = '#78b5c8';
+  ctx.strokeStyle = '#4b6870';
+  ctx.lineWidth = Math.max(1, r * .075);
+  ctx.beginPath();
+  ctx.arc(r * .32, -r * .04, r * .27, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255, 255, 255, .55)';
+  ctx.beginPath();
+  ctx.arc(r * .24, -r * .12, r * .07, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = '#655431';
+  ctx.lineWidth = Math.max(1.1, r * .09);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-r * .25, -r * .54);
+  ctx.lineTo(-r * .25, -r * .86);
+  ctx.lineTo(r * .03, -r * .86);
+  ctx.stroke();
+
+  ctx.fillStyle = '#bb7d3c';
+  ctx.beginPath();
+  ctx.moveTo(-r * .55, r * .5);
+  ctx.lineTo(-r * .18, r * .83);
+  ctx.lineTo(r * .1, r * .52);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawGoalHalo(x, y, color) {
@@ -478,7 +619,7 @@ function render() {
     drawOctopus(gameState.pink.x, gameState.pink.y, '#df7fa7');
   }
 
-  drawPlayer(gameState.player.x, gameState.player.y);
+  drawPlayer(gameState.player.x, gameState.player.y, gameState.playerAngle);
 }
 
 // ====================================================================
