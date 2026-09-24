@@ -1025,6 +1025,11 @@ function drawRevealOutlines() {
       return !circle.invisible;
     });
 
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(transform.offsetX, transform.offsetY, panelSize, panelSize);
+    ctx.clip();
+
     // One even-odd path preserves the exact circle geometry without a pixel-grid staircase.
     ctx.beginPath();
     ctx.rect(transform.offsetX, transform.offsetY, panelSize, panelSize);
@@ -1038,10 +1043,6 @@ function drawRevealOutlines() {
     ctx.fillStyle = 'rgba(48, 49, 48, .1)';
     ctx.fill('evenodd');
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(transform.offsetX, transform.offsetY, panelSize, panelSize);
-    ctx.clip();
     ctx.strokeStyle = 'rgba(48, 49, 48, .2)';
     ctx.lineWidth = Math.max(1, transform.scale * .08);
     circles.forEach(function (circle) {
