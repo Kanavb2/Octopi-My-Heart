@@ -222,9 +222,10 @@ body.reveal-complete .final-card {
   left: 50%;
   bottom: clamp(20px, 4vh, 42px);
   z-index: 105;
-  color: var(--quiet);
-  font-size: clamp(12px, 1.2vw, 15px);
-  letter-spacing: .06em;
+  color: rgba(48, 49, 48, .78);
+  font-size: clamp(14px, 1.45vw, 18px);
+  font-weight: 500;
+  letter-spacing: .04em;
   opacity: 0;
   transform: translateX(-50%);
   transition: opacity .2s ease;
