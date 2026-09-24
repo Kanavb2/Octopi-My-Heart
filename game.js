@@ -709,8 +709,8 @@ function drawOctopus(x, y, color, mood, size) {
     ctx.lineWidth = Math.max(1, r * .045);
     for (const side of [-1, 1]) {
       ctx.beginPath();
-      ctx.moveTo(side * r * .42, -r * .46);
-      ctx.lineTo(side * r * .16, -r * .4);
+      ctx.moveTo(side * r * .42, -r * .36);
+      ctx.lineTo(side * r * .16, -r * .48);
       ctx.stroke();
     }
   }
