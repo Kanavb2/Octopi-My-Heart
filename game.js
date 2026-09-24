@@ -17,7 +17,7 @@ const MOVE_STEP = 0.5;
 const MOVE_SPEED = 38; // Half-cell moves preserve the original travel speed with smoother curves.
 const PLAYER_RADIUS = 0.3;
 const RECORD_INTERVAL = 1000 / 30;
-const REWIND_INTERVAL = 1000 / 60;
+const PLAYBACK_INTERVAL = 1000 / 60;
 let CELL_SIZE = 1;
 let VIEW_OFFSET_X = 0;
 let VIEW_OFFSET_Y = 0;
@@ -855,9 +855,9 @@ function updateReveal() {
       playRewindSound();
     }
   } else if (revealPhase === 'rewinding') {
-    while (now - revealLastStepTime >= REWIND_INTERVAL) {
+    while (now - revealLastStepTime >= PLAYBACK_INTERVAL) {
       revealFrameIndex--;
-      revealLastStepTime += REWIND_INTERVAL;
+      revealLastStepTime += PLAYBACK_INTERVAL;
       if (revealFrameIndex < 0) {
         revealDisplayFrames[revealLevelIndex] = 0;
         revealLevelIndex--;
@@ -884,10 +884,10 @@ function updateReveal() {
       playForwardSound();
     }
   } else if (revealPhase === 'drawing') {
-    while (now - revealLastStepTime >= RECORD_INTERVAL) {
+    while (now - revealLastStepTime >= PLAYBACK_INTERVAL) {
       const previousIndex = revealFrameIndex;
       revealFrameIndex++;
-      revealLastStepTime += RECORD_INTERVAL;
+      revealLastStepTime += PLAYBACK_INTERVAL;
       if (revealFrameIndex >= allPaths[revealLevelIndex].frames.length) {
         revealDisplayFrames[revealLevelIndex] = allPaths[revealLevelIndex].frames.length - 1;
         revealLevelIndex++;
