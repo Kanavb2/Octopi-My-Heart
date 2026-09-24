@@ -320,7 +320,18 @@ function tryMove(dx, dy) {
   const now = Date.now();
   if (now - gameState.lastMoveTime < MOVE_SPEED) return;
 
-  const deltaX = dx * MOVE_STEP;
+  const level = LEVELS[currentLevel];
+  let horizontalInput = dx;
+  const levelTwoCurrentActive = currentLevel === 1
+    && gameState.blue.collected
+    && gameState.levelTwoEntrySide
+    && gameState.player.y < 16;
+  if (levelTwoCurrentActive) {
+    const currentDirection = gameState.levelTwoEntrySide === 'left' ? 1 : -1;
+    horizontalInput = Math.max(-1, Math.min(1, dx * .55 + currentDirection * .7));
+  }
+
+  const deltaX = horizontalInput * MOVE_STEP;
   const deltaY = dy * MOVE_STEP;
   let newX = gameState.player.x + deltaX;
   let newY = gameState.player.y + deltaY;
@@ -329,7 +340,6 @@ function tryMove(dx, dy) {
     newX < PLAYER_RADIUS || newX > GRID_SIZE - PLAYER_RADIUS
     || newY < PLAYER_RADIUS || newY > GRID_SIZE - PLAYER_RADIUS
   ) return;
-  const level = LEVELS[currentLevel];
   if (isMovementBlocked(level, gameState.player.x, gameState.player.y, newX, newY)) {
     const slideTarget = slideAlongCircle(
       level,
