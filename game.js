@@ -592,10 +592,11 @@ function updateTimer() {
 }
 
 // -- Drawing (gameplay) ----------------------------------------------
-function drawOctopus(x, y, color) {
+function drawOctopus(x, y, color, mood, size) {
   const px = x * CELL_SIZE;
   const py = y * CELL_SIZE;
-  const r = CELL_SIZE * 0.68;
+  const octopusMood = mood || 'sad';
+  const r = CELL_SIZE * 0.68 * (size || 1);
   const now = performance.now();
   const isBlue = color === '#6496dc';
   const phase = isBlue ? 0 : Math.PI;
@@ -697,9 +698,45 @@ function drawOctopus(x, y, color) {
   ctx.lineWidth = Math.max(1, r * .055);
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.arc(0, r * .11, r * .15, .14 * Math.PI, .86 * Math.PI);
+  if (octopusMood === 'happy') {
+    ctx.arc(0, r * .11, r * .16, .14 * Math.PI, .86 * Math.PI);
+  } else {
+    ctx.arc(0, r * .3, r * .15, 1.14 * Math.PI, 1.86 * Math.PI);
+  }
   ctx.stroke();
+
+  if (octopusMood === 'sad') {
+    ctx.lineWidth = Math.max(1, r * .045);
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(side * r * .42, -r * .46);
+      ctx.lineTo(side * r * .16, -r * .4);
+      ctx.stroke();
+    }
+  }
   ctx.restore();
+}
+
+function drawOctopiState(level, frame) {
+  if (frame.pinkCollected) {
+    drawOctopus(level.pink.x - .58, level.pink.y - .16, '#6496dc', 'happy', .82);
+    drawOctopus(level.pink.x + .58, level.pink.y - .16, '#df7fa7', 'happy', .82);
+    return;
+  }
+
+  if (frame.blueCollected) {
+    const carryDistance = .82;
+    drawOctopus(
+      frame.player.x - Math.cos(frame.player.angle) * carryDistance,
+      frame.player.y - Math.sin(frame.player.angle) * carryDistance - .18,
+      '#6496dc',
+      'sad',
+      .58,
+    );
+  } else {
+    drawOctopus(level.blue.x, level.blue.y, '#6496dc', 'sad');
+  }
+  drawOctopus(level.pink.x, level.pink.y, '#df7fa7', 'sad');
 }
 
 function drawPlayer(x, y, angle) {
@@ -845,14 +882,12 @@ function render() {
   drawWalkableArea();
 
   if (!gameState.blue.collected) {
-    if (!gameState.blue.collected) drawGoalHalo(gameState.blue.x, gameState.blue.y, '#4f82ca');
-    drawOctopus(gameState.blue.x, gameState.blue.y, '#6496dc');
-  }
-  if (!gameState.pink.collected) {
-    if (gameState.blue.collected) drawGoalHalo(gameState.pink.x, gameState.pink.y, '#cb638f');
-    drawOctopus(gameState.pink.x, gameState.pink.y, '#df7fa7');
+    drawGoalHalo(gameState.blue.x, gameState.blue.y, '#4f82ca');
+  } else if (!gameState.pink.collected) {
+    drawGoalHalo(gameState.pink.x, gameState.pink.y, '#cb638f');
   }
 
+  drawOctopiState(LEVELS[currentLevel], snapshotGameplayFrame());
   drawPlayer(gameState.player.x, gameState.player.y, gameState.playerAngle);
   ctx.restore();
 }
@@ -1101,12 +1136,7 @@ function drawReplayActors(alpha) {
     ctx.save();
     ctx.translate(transform.offsetX, transform.offsetY);
     CELL_SIZE = transform.scale;
-    if (!frame.blueCollected) {
-      drawOctopus(level.blue.x, level.blue.y, '#6496dc');
-    }
-    if (!frame.pinkCollected) {
-      drawOctopus(level.pink.x, level.pink.y, '#df7fa7');
-    }
+    drawOctopiState(level, frame);
     drawPlayer(frame.player.x, frame.player.y, frame.player.angle);
     ctx.restore();
   });
