@@ -138,7 +138,7 @@ const isWallLevel3 = makeCircleCollision(LEVEL_CIRCLES[2]);
 const LEVELS = [
   {
     name: 'Level 1',
-    timer: 4000,
+    timer: 3000,
     playerStart: { x: 15, y: 17.5 },
     blue: { x: 15, y: 27.5 },
     pink: { x: 15, y: 7.5 },
@@ -147,7 +147,7 @@ const LEVELS = [
   },
   {
     name: 'Level 2',
-    timer: 9000,
+    timer: 8000,
     playerStart: { x: 15, y: 25.5 },
     blue: { x: 15, y: 7 },
     pink: { x: 15, y: 25.5 },
@@ -156,7 +156,7 @@ const LEVELS = [
   },
   {
     name: 'Level 3',
-    timer: 8000,
+    timer: 6000,
     playerStart: { x: 3, y: 7.5 },
     blue: { x: 15, y: 27 },
     pink: { x: 27, y: 7.5 },
