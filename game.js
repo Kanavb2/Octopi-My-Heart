@@ -333,8 +333,9 @@ function tryMove(dx, dy) {
   if (now - gameState.lastMoveTime < MOVE_SPEED) return;
 
   const level = LEVELS[currentLevel];
-  const deltaX = dx * MOVE_STEP;
-  const deltaY = dy * MOVE_STEP;
+  const inputMagnitude = Math.hypot(dx, dy) || 1;
+  const deltaX = (dx / inputMagnitude) * MOVE_STEP;
+  const deltaY = (dy / inputMagnitude) * MOVE_STEP;
   let newX = gameState.player.x + deltaX;
   let newY = gameState.player.y + deltaY;
 
