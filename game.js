@@ -890,7 +890,7 @@ shareButton.addEventListener('click', async function () {
   const shareData = {
     title: 'octopi my heart',
     text: 'a tiny puzzle for you',
-    url: window.location.href.split('#')[0],
+    url: window.location.origin + window.location.pathname,
   };
 
   if (navigator.share) {
