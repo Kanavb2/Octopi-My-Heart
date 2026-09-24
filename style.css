@@ -161,12 +161,57 @@ body.playing .title-card {
   animation: fadeIn 1s ease-in;
 }
 
+.final-card {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(24px, 7vh, 72px);
+  z-index: 110;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  color: var(--ink);
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, 6px);
+  transition: opacity .8s ease, transform .8s ease, visibility .8s;
+  pointer-events: none;
+}
+
+body.reveal-complete .final-card {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+.final-card p {
+  font-size: clamp(18px, 2.2vw, 28px);
+  font-weight: 400;
+  letter-spacing: -.02em;
+  white-space: nowrap;
+}
+
+.final-card button {
+  padding: 3px 0;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  color: var(--quiet);
+  background: transparent;
+  font: inherit;
+  font-size: clamp(13px, 1.25vw, 16px);
+  cursor: pointer;
+}
+
+.final-card button:hover,
+.final-card button:focus-visible { color: var(--ink); }
+
 @media (max-width: 600px) {
   .ui-panel { top: 16px; width: calc(100vw - 28px); }
   .title-card { top: 48%; }
   .title-card h1 { font-size: clamp(38px, 12.5vw, 58px); white-space: nowrap; line-height: .88; }
   .title-card > div { width: 90%; align-items: center; flex-direction: column; gap: 3px; }
   .status { max-width: 220px; }
+  .final-card { bottom: 24px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -9,6 +9,7 @@ const objectiveEl = document.getElementById('objective');
 const statusEl = document.getElementById('status');
 const revealOverlay = document.getElementById('revealOverlay');
 const revealMessage = document.getElementById('revealMessage');
+const shareButton = document.getElementById('shareButton');
 
 // -- Constants -------------------------------------------------------
 const GRID_SIZE = 30;
@@ -664,6 +665,7 @@ function startReveal() {
   revealPhase = 'fadein';
   revealPhaseStart = Date.now();
   revealProgress = 0;
+  document.body.classList.remove('reveal-complete');
 
   // Hide gameplay UI
   document.querySelector('.ui-panel').style.display = 'none';
@@ -739,6 +741,8 @@ function updateReveal() {
       revealPhase = 'fadeout';
       revealPhaseStart = now;
     }
+  } else if (revealPhase === 'fadeout' && now - revealPhaseStart > 400) {
+    document.body.classList.add('reveal-complete');
   }
 }
 
@@ -820,6 +824,10 @@ function renderReveal() {
 
   // Draw accumulated path lines grouped by level
   const levelColors = ['#303130', '#c75482', '#303130'];
+  const pathLineWidth = Math.max(
+    5,
+    Math.min(10, Math.min(canvas.width, canvas.height) * 0.007),
+  );
   const byLevel = {};
 
   for (let i = 0; i < Math.min(revealProgress, revealFrames.length); i++) {
@@ -837,7 +845,7 @@ function renderReveal() {
 
     // Glow layer
     ctx.strokeStyle = color;
-    ctx.lineWidth = 8;
+    ctx.lineWidth = pathLineWidth * 3;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.globalAlpha = 0.15;
@@ -850,7 +858,7 @@ function renderReveal() {
 
     // Main line
     ctx.globalAlpha = 1;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = pathLineWidth;
     ctx.beginPath();
     ctx.moveTo(points[0].px, points[0].py);
     for (let i = 1; i < points.length; i++) {
@@ -877,6 +885,34 @@ function renderReveal() {
   }
 
 }
+
+shareButton.addEventListener('click', async function () {
+  const shareData = {
+    title: 'octopi my heart',
+    text: 'a tiny puzzle for you',
+    url: window.location.href.split('#')[0],
+  };
+
+  if (navigator.share) {
+    try {
+      await navigator.share(shareData);
+      return;
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+    }
+  }
+
+  try {
+    await navigator.clipboard.writeText(shareData.url);
+    shareButton.textContent = 'link copied';
+    window.setTimeout(function () {
+      shareButton.textContent = 'share this with someone';
+    }, 1800);
+  } catch (error) {
+    window.location.href = 'mailto:?subject=' + encodeURIComponent(shareData.title)
+      + '&body=' + encodeURIComponent(shareData.text + '\n\n' + shareData.url);
+  }
+});
 
 // -- Game loop -------------------------------------------------------
 function gameLoop() {
