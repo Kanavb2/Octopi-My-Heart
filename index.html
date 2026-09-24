@@ -4,13 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>octopi my heart</title>
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
   <div class="game-container">
     <div class="title-card" id="titleCard">
       <h1>octopi <em>my</em> heart</h1>
-      <div><span>press arrow keys to move</span><span>three tiny levels</span></div>
+      <div><span id="moveHint">press arrow keys to move</span><span>three tiny levels</span></div>
     </div>
     <div class="ui-panel">
       <div class="level-copy">
@@ -20,6 +20,7 @@
       <div class="timer" id="timer">6.0</div>
     </div>
     <canvas id="gameCanvas"></canvas>
+    <div class="replay-label" id="replayLabel" aria-live="polite"></div>
     <div class="final-card" id="finalCard" aria-live="polite">
       <p>you octopi my heart.</p>
       <button type="button" id="shareButton">share this with someone</button>
@@ -28,6 +29,6 @@
       <div class="reveal-message" id="revealMessage"></div>
     </div>
   </div>
-  <script src="game.js?v=10"></script>
+  <script src="game.js?v=11"></script>
 </body>
 </html>

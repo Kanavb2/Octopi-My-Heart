@@ -34,6 +34,7 @@ body {
 #gameCanvas {
   display: block;
   background: transparent;
+  touch-action: none;
 }
 
 .ui-panel {
@@ -215,6 +216,22 @@ body.reveal-complete .final-card {
 
 .final-card button:hover,
 .final-card button:focus-visible { color: var(--ink); }
+
+.replay-label {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(20px, 4vh, 42px);
+  z-index: 105;
+  color: var(--quiet);
+  font-size: clamp(12px, 1.2vw, 15px);
+  letter-spacing: .06em;
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity .2s ease;
+  pointer-events: none;
+}
+
+.replay-label.visible { opacity: 1; }
 
 @media (max-width: 600px) {
   .ui-panel { top: 16px; width: calc(100vw - 28px); }

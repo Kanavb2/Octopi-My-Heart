@@ -16,6 +16,8 @@ const GRID_SIZE = 30;
 const MOVE_STEP = 0.5;
 const MOVE_SPEED = 38; // Half-cell moves preserve the original travel speed with smoother curves.
 const PLAYER_RADIUS = 0.3;
+const RECORD_INTERVAL = 1000 / 30;
+const REWIND_INTERVAL = 1000 / 60;
 let CELL_SIZE = 1;
 let VIEW_OFFSET_X = 0;
 let VIEW_OFFSET_Y = 0;
@@ -36,7 +38,6 @@ function resizeCanvas() {
   VIEW_OFFSET_Y = (canvas.height - worldSize) / 2;
 }
 resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
 
 // -- Level definitions -----------------------------------------------
 
@@ -172,6 +173,26 @@ let gameState = {};
 let allPaths = [];
 let gameStarted = false;
 
+function snapshotGameplayFrame() {
+  return {
+    player: {
+      x: gameState.player.x,
+      y: gameState.player.y,
+      angle: gameState.playerAngle,
+    },
+    blueCollected: gameState.blue.collected,
+    pinkCollected: gameState.pink.collected,
+  };
+}
+
+function recordGameplayFrame(force) {
+  if (!gameState.frames) return;
+  const now = performance.now();
+  if (!force && now - gameState.lastRecordTime < RECORD_INTERVAL) return;
+  gameState.frames.push(snapshotGameplayFrame());
+  gameState.lastRecordTime = now;
+}
+
 function resetLevel() {
   const level = LEVELS[currentLevel];
   gameState = {
@@ -182,7 +203,8 @@ function resetLevel() {
     ),
     blue: { ...level.blue, collected: false },
     pink: { ...level.pink, collected: false },
-    path: [],
+    frames: [],
+    lastRecordTime: performance.now(),
     timer: level.timer,
     state: gameStarted ? 'playing' : 'ready',
     lastMoveTime: 0,
@@ -190,7 +212,7 @@ function resetLevel() {
     levelTwoEntrySide: null,
     levelTwoExitSide: null,
   };
-  gameState.path.push({ ...gameState.player });
+  recordGameplayFrame(true);
   objectiveEl.textContent = level.name.toLowerCase() + ' · reach the blue octopus';
   statusEl.textContent = 'Hold two arrow keys to move diagonally.';
   timerEl.textContent = (level.timer / 1000).toFixed(1);
@@ -200,16 +222,22 @@ function resetLevel() {
 
 // -- Input -----------------------------------------------------------
 const keys = {};
+let pointerOrigin = null;
+let pointerDirection = { x: 0, y: 0 };
+
+function beginPlaying() {
+  if (gameState.state !== 'ready') return;
+  gameStarted = true;
+  gameState.state = 'playing';
+  lastTime = Date.now();
+  document.body.classList.add('playing');
+}
+
 window.addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
     e.preventDefault();
     keys[e.key] = true;
-    if (gameState.state === 'ready') {
-      gameStarted = true;
-      gameState.state = 'playing';
-      lastTime = Date.now();
-      document.body.classList.add('playing');
-    }
+    beginPlaying();
     const dx = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0);
     const dy = (keys.ArrowDown ? 1 : 0) - (keys.ArrowUp ? 1 : 0);
     tryMove(dx, dy);
@@ -218,6 +246,40 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => {
   keys[e.key] = false;
 });
+
+function clearInput() {
+  Object.keys(keys).forEach(function (key) { keys[key] = false; });
+  pointerOrigin = null;
+  pointerDirection = { x: 0, y: 0 };
+}
+
+window.addEventListener('blur', clearInput);
+document.addEventListener('visibilitychange', function () {
+  clearInput();
+  lastTime = Date.now();
+});
+
+canvas.addEventListener('pointerdown', function (event) {
+  if (revealActive) return;
+  pointerOrigin = { x: event.clientX, y: event.clientY };
+  pointerDirection = { x: 0, y: 0 };
+  canvas.setPointerCapture(event.pointerId);
+  beginPlaying();
+});
+
+canvas.addEventListener('pointermove', function (event) {
+  if (!pointerOrigin) return;
+  const deltaX = event.clientX - pointerOrigin.x;
+  const deltaY = event.clientY - pointerOrigin.y;
+  const deadZone = 8;
+  pointerDirection = {
+    x: Math.abs(deltaX) > deadZone ? Math.sign(deltaX) : 0,
+    y: Math.abs(deltaY) > deadZone ? Math.sign(deltaY) : 0,
+  };
+});
+
+canvas.addEventListener('pointerup', clearInput);
+canvas.addEventListener('pointercancel', clearInput);
 
 // -- Movement --------------------------------------------------------
 function tryMove(dx, dy) {
@@ -256,8 +318,6 @@ function tryMove(dx, dy) {
   gameState.player.x = newX;
   gameState.player.y = newY;
   gameState.lastMoveTime = now;
-  gameState.path.push({ x: newX, y: newY });
-
   checkObjectives();
 
   if (currentLevel === 1) {
@@ -285,6 +345,7 @@ function checkObjectives() {
     b.collected = true;
     objectiveEl.textContent = LEVELS[currentLevel].name.toLowerCase() + ' · now reach the pink octopus';
     playCollectSound(600);
+    recordGameplayFrame(true);
   }
 
   if (b.collected && !pk.collected && Math.hypot(p.x - pk.x, p.y - pk.y) <= 0.6) {
@@ -292,10 +353,17 @@ function checkObjectives() {
     gameState.state = 'success';
     gameState.canMove = false;
     playCollectSound(800);
+    recordGameplayFrame(true);
 
     allPaths.push({
       level: currentLevel,
-      path: [...gameState.path],
+      frames: gameState.frames.map(function (frame) {
+        return {
+          player: { ...frame.player },
+          blueCollected: frame.blueCollected,
+          pinkCollected: frame.pinkCollected,
+        };
+      }),
     });
 
     if (currentLevel < LEVELS.length - 1) {
@@ -315,36 +383,52 @@ function checkObjectives() {
 }
 
 // -- Sounds ----------------------------------------------------------
-function playCollectSound(freq) {
+let audioContext = null;
+
+function getAudioContext() {
+  if (!audioContext) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    audioContext = new AudioContextClass();
+  }
+  if (audioContext.state === 'suspended') audioContext.resume();
+  return audioContext;
+}
+
+function playTone(frequency, duration, type, volume, endFrequency) {
   try {
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ac.createOscillator();
-    const gain = ac.createGain();
-    osc.connect(gain);
-    gain.connect(ac.destination);
-    osc.frequency.value = freq;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(0.12, ac.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.2);
-    osc.start(ac.currentTime);
-    osc.stop(ac.currentTime + 0.2);
+    const context = getAudioContext();
+    if (!context) return;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, context.currentTime);
+    if (endFrequency) {
+      oscillator.frequency.exponentialRampToValueAtTime(endFrequency, context.currentTime + duration);
+    }
+    gain.gain.setValueAtTime(volume, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + duration);
+    oscillator.start(context.currentTime);
+    oscillator.stop(context.currentTime + duration);
   } catch (_) {}
 }
 
+function playCollectSound(freq) {
+  playTone(freq, 0.2, 'sine', 0.12);
+}
+
 function playErrorSound() {
-  try {
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ac.createOscillator();
-    const gain = ac.createGain();
-    osc.connect(gain);
-    gain.connect(ac.destination);
-    osc.frequency.value = 200;
-    osc.type = 'square';
-    gain.gain.setValueAtTime(0.15, ac.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.15);
-    osc.start(ac.currentTime);
-    osc.stop(ac.currentTime + 0.15);
-  } catch (_) {}
+  playTone(200, 0.15, 'square', 0.15);
+}
+
+function playRewindSound() {
+  playTone(260, 0.65, 'sine', 0.045, 90);
+}
+
+function playForwardSound() {
+  playTone(180, 0.5, 'sine', 0.04, 420);
 }
 
 // -- Timer -----------------------------------------------------------
@@ -352,7 +436,7 @@ function updateTimer() {
   if (gameState.state !== 'playing') return;
 
   const now = Date.now();
-  const delta = now - lastTime;
+  const delta = Math.min(now - lastTime, 100);
   lastTime = now;
   const wrongWayPenalty = currentLevel === 1
     && gameState.levelTwoEntrySide
@@ -655,26 +739,37 @@ function render() {
 // ====================================================================
 
 let revealActive = false;
-let revealFrames = [];
-let revealProgress = 0;
-let revealLastDrawTime = 0;
-let revealSpeed = 20; // ms per point
+let revealLevelIndex = 0;
+let revealFrameIndex = 0;
+let revealLastStepTime = 0;
 let revealPhase = 'fadein';
 let revealPhaseStart = 0;
 let revealTransforms = [];
+let revealDisplayFrames = [];
+let revealPathLayers = [];
+
+function setReplayLabel(text) {
+  const label = document.getElementById('replayLabel');
+  label.textContent = text;
+  label.classList.toggle('visible', Boolean(text));
+}
 
 function startReveal() {
   revealActive = true;
   revealPhase = 'fadein';
   revealPhaseStart = Date.now();
-  revealProgress = 0;
+  revealLevelIndex = allPaths.length - 1;
+  revealFrameIndex = allPaths[revealLevelIndex].frames.length - 1;
+  revealDisplayFrames = allPaths.map(function (recording) {
+    return recording.frames.length - 1;
+  });
   document.body.classList.remove('reveal-complete');
+  setReplayLabel('');
 
   // Hide gameplay UI
   document.querySelector('.ui-panel').style.display = 'none';
 
   buildRevealLayout();
-  buildRevealFrames();
 }
 
 function buildRevealLayout() {
@@ -693,31 +788,59 @@ function buildRevealLayout() {
       offsetX: startX + index * (panelSize + gap),
       offsetY: startY,
       scale: scale,
+      size: panelSize,
     };
+  });
+  rebuildPathLayers();
+}
+
+function rebuildPathLayers() {
+  revealPathLayers = revealTransforms.map(function (transform, levelIndex) {
+    const layer = document.createElement('canvas');
+    layer.width = Math.max(1, Math.ceil(transform.size));
+    layer.height = Math.max(1, Math.ceil(transform.size));
+    const layerContext = layer.getContext('2d');
+    const drawnThrough = revealPhase === 'drawing' || revealPhase === 'pause' || revealPhase === 'fadeout'
+      ? revealDisplayFrames[levelIndex]
+      : 0;
+    if (drawnThrough > 0) {
+      const frames = allPaths[levelIndex].frames;
+      layerContext.strokeStyle = ['#303130', '#c75482', '#303130'][levelIndex];
+      layerContext.lineWidth = Math.max(5, Math.min(10, transform.size * 0.021));
+      layerContext.lineCap = 'round';
+      layerContext.lineJoin = 'round';
+      layerContext.beginPath();
+      layerContext.moveTo(frames[0].player.x * transform.scale, frames[0].player.y * transform.scale);
+      for (let frameIndex = 1; frameIndex <= drawnThrough; frameIndex++) {
+        layerContext.lineTo(
+          frames[frameIndex].player.x * transform.scale,
+          frames[frameIndex].player.y * transform.scale,
+        );
+      }
+      layerContext.stroke();
+    }
+    return layer;
   });
 }
 
-function buildRevealFrames() {
-  revealFrames = [];
-
-  // Preserve the order each run happened so the replay draws every shape forward.
-  for (let i = 0; i < allPaths.length; i++) {
-    const lp = allPaths[i];
-    const t = revealTransforms[i];
-
-    for (const p of lp.path) {
-      revealFrames.push({
-        levelIdx: i,
-        px: p.x * t.scale + t.offsetX,
-        py: p.y * t.scale + t.offsetY,
-      });
-    }
-
-    // Break marker between levels
-    if (i < allPaths.length - 1) {
-      revealFrames.push({ levelIdx: -1, px: 0, py: 0 });
-    }
-  }
+function drawNextPathSegment(levelIndex, previousIndex, nextIndex) {
+  if (nextIndex <= 0 || previousIndex === nextIndex) return;
+  const transform = revealTransforms[levelIndex];
+  const frames = allPaths[levelIndex].frames;
+  const layerContext = revealPathLayers[levelIndex].getContext('2d');
+  const previousFrame = frames[Math.max(0, previousIndex)];
+  const nextFrame = frames[nextIndex];
+  layerContext.strokeStyle = ['#303130', '#c75482', '#303130'][levelIndex];
+  layerContext.lineWidth = Math.max(5, Math.min(10, transform.size * 0.021));
+  layerContext.lineCap = 'round';
+  layerContext.lineJoin = 'round';
+  layerContext.beginPath();
+  layerContext.moveTo(
+    previousFrame.player.x * transform.scale,
+    previousFrame.player.y * transform.scale,
+  );
+  layerContext.lineTo(nextFrame.player.x * transform.scale, nextFrame.player.y * transform.scale);
+  layerContext.stroke();
 }
 
 function updateReveal() {
@@ -727,32 +850,58 @@ function updateReveal() {
     // Pause on the completed run, then show the full recording ready to rewind.
     if (now - revealPhaseStart > 1000) {
       revealPhase = 'rewinding';
-      revealProgress = revealFrames.length;
-      revealLastDrawTime = now;
+      revealLastStepTime = now;
+      setReplayLabel('rewinding…');
+      playRewindSound();
     }
   } else if (revealPhase === 'rewinding') {
-    while (now - revealLastDrawTime >= revealSpeed && revealProgress > 0) {
-      revealProgress--;
-      revealLastDrawTime += revealSpeed;
-    }
-    if (revealProgress <= 0) {
-      revealPhase = 'rewind-pause';
-      revealPhaseStart = now;
+    while (now - revealLastStepTime >= REWIND_INTERVAL) {
+      revealFrameIndex--;
+      revealLastStepTime += REWIND_INTERVAL;
+      if (revealFrameIndex < 0) {
+        revealDisplayFrames[revealLevelIndex] = 0;
+        revealLevelIndex--;
+        if (revealLevelIndex < 0) {
+          revealPhase = 'rewind-pause';
+          revealPhaseStart = now;
+          setReplayLabel('');
+          break;
+        }
+        revealFrameIndex = allPaths[revealLevelIndex].frames.length - 1;
+      } else {
+        revealDisplayFrames[revealLevelIndex] = revealFrameIndex;
+      }
     }
   } else if (revealPhase === 'rewind-pause') {
     if (now - revealPhaseStart > 500) {
       revealPhase = 'drawing';
-      revealProgress = 0;
-      revealLastDrawTime = now;
+      revealLevelIndex = 0;
+      revealFrameIndex = 0;
+      revealDisplayFrames = allPaths.map(function () { return 0; });
+      rebuildPathLayers();
+      revealLastStepTime = now;
+      setReplayLabel('playing forward…');
+      playForwardSound();
     }
   } else if (revealPhase === 'drawing') {
-    while (now - revealLastDrawTime >= revealSpeed && revealProgress < revealFrames.length) {
-      revealProgress++;
-      revealLastDrawTime += revealSpeed;
-    }
-    if (revealProgress >= revealFrames.length) {
-      revealPhase = 'pause';
-      revealPhaseStart = now;
+    while (now - revealLastStepTime >= RECORD_INTERVAL) {
+      const previousIndex = revealFrameIndex;
+      revealFrameIndex++;
+      revealLastStepTime += RECORD_INTERVAL;
+      if (revealFrameIndex >= allPaths[revealLevelIndex].frames.length) {
+        revealDisplayFrames[revealLevelIndex] = allPaths[revealLevelIndex].frames.length - 1;
+        revealLevelIndex++;
+        if (revealLevelIndex >= allPaths.length) {
+          revealPhase = 'pause';
+          revealPhaseStart = now;
+          setReplayLabel('');
+          break;
+        }
+        revealFrameIndex = 0;
+      } else {
+        revealDisplayFrames[revealLevelIndex] = revealFrameIndex;
+        drawNextPathSegment(revealLevelIndex, previousIndex, revealFrameIndex);
+      }
     }
   } else if (revealPhase === 'pause') {
     if (now - revealPhaseStart > 800) {
@@ -763,6 +912,11 @@ function updateReveal() {
     document.body.classList.add('reveal-complete');
   }
 }
+
+window.addEventListener('resize', function () {
+  resizeCanvas();
+  if (revealActive) buildRevealLayout();
+});
 
 function drawRevealOutlines() {
   const wallFns = [isWallLevel1, isWallLevel2, isWallLevel3];
@@ -811,47 +965,31 @@ function drawRevealOutlines() {
   }
 }
 
-function drawRewindActors() {
+function drawReplayActors(alpha) {
   const previousCellSize = CELL_SIZE;
+  ctx.save();
+  ctx.globalAlpha = alpha;
 
-  // Keep both octopi visible in every level while the submarine retraces the run.
   revealTransforms.forEach(function (transform, levelIndex) {
     const level = LEVELS[levelIndex];
+    const frames = allPaths[levelIndex].frames;
+    const frameIndex = Math.max(0, Math.min(revealDisplayFrames[levelIndex], frames.length - 1));
+    const frame = frames[frameIndex];
     ctx.save();
     ctx.translate(transform.offsetX, transform.offsetY);
     CELL_SIZE = transform.scale;
-    drawOctopus(level.blue.x, level.blue.y, '#6496dc');
-    drawOctopus(level.pink.x, level.pink.y, '#df7fa7');
+    if (!frame.blueCollected) {
+      drawOctopus(level.blue.x, level.blue.y, '#6496dc');
+    }
+    if (!frame.pinkCollected) {
+      drawOctopus(level.pink.x, level.pink.y, '#df7fa7');
+    }
+    drawPlayer(frame.player.x, frame.player.y, frame.player.angle);
     ctx.restore();
   });
 
-  let frameIndex = revealPhase === 'rewind-pause' ? 0 : revealProgress - 1;
-  while (frameIndex >= 0 && revealFrames[frameIndex].levelIdx === -1) frameIndex--;
-
-  if (frameIndex >= 0) {
-    const frame = revealFrames[frameIndex];
-    const transform = revealTransforms[frame.levelIdx];
-    let previousFrameIndex = frameIndex - 1;
-    while (previousFrameIndex >= 0 && revealFrames[previousFrameIndex].levelIdx === -1) {
-      previousFrameIndex--;
-    }
-    const previousFrame = revealFrames[previousFrameIndex];
-    const angle = previousFrame && previousFrame.levelIdx === frame.levelIdx
-      ? Math.atan2(previousFrame.py - frame.py, previousFrame.px - frame.px)
-      : 0;
-
-    ctx.save();
-    ctx.translate(transform.offsetX, transform.offsetY);
-    CELL_SIZE = transform.scale;
-    drawPlayer(
-      (frame.px - transform.offsetX) / transform.scale,
-      (frame.py - transform.offsetY) / transform.scale,
-      angle,
-    );
-    ctx.restore();
-  }
-
   CELL_SIZE = previousCellSize;
+  ctx.restore();
 }
 
 function renderReveal() {
@@ -883,74 +1021,25 @@ function renderReveal() {
     drawRevealOutlines();
   }
 
-  // Draw accumulated path lines grouped by level
-  const levelColors = ['#303130', '#c75482', '#303130'];
-  const pathLineWidth = Math.max(
-    5,
-    Math.min(10, Math.min(canvas.width, canvas.height) * 0.007),
-  );
-  const byLevel = {};
-
-  if (revealPhase !== 'rewinding' && revealPhase !== 'rewind-pause') {
-    for (let i = 0; i < Math.min(revealProgress, revealFrames.length); i++) {
-      const f = revealFrames[i];
-      if (f.levelIdx === -1) continue;
-      if (!byLevel[f.levelIdx]) byLevel[f.levelIdx] = [];
-      byLevel[f.levelIdx].push(f);
-    }
-  }
-
-  for (const lvl in byLevel) {
-    const points = byLevel[lvl];
-    if (points.length < 2) continue;
-
-    const color = levelColors[lvl] || '#ffffff';
-
-    // Glow layer
-    ctx.strokeStyle = color;
-    ctx.lineWidth = pathLineWidth * 3;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.globalAlpha = 0.15;
-    ctx.beginPath();
-    ctx.moveTo(points[0].px, points[0].py);
-    for (let i = 1; i < points.length; i++) {
-      ctx.lineTo(points[i].px, points[i].py);
-    }
-    ctx.stroke();
-
-    // Main line
-    ctx.globalAlpha = 1;
-    ctx.lineWidth = pathLineWidth;
-    ctx.beginPath();
-    ctx.moveTo(points[0].px, points[0].py);
-    for (let i = 1; i < points.length; i++) {
-      ctx.lineTo(points[i].px, points[i].py);
-    }
-    ctx.stroke();
-  }
-
-  if (revealPhase === 'rewinding' || revealPhase === 'rewind-pause') {
-    drawRewindActors();
-  }
-
-  // The forward pass is the first time the hidden shapes are drawn.
-  if (revealPhase === 'drawing' && revealProgress > 0 && revealProgress <= revealFrames.length) {
-    let idx = revealProgress - 1;
-    // Skip break markers
-    while (idx >= 0 && revealFrames[idx].levelIdx === -1) idx--;
-    if (idx >= 0) {
-      const f = revealFrames[idx];
-      ctx.fillStyle = '#303130';
-      ctx.shadowColor = 'rgba(48, 49, 48, .45)';
+  // Persistent offscreen layers make forward drawing incremental instead of O(n) each frame.
+  if (revealPhase === 'drawing' || revealPhase === 'pause' || revealPhase === 'fadeout') {
+    revealPathLayers.forEach(function (layer, levelIndex) {
+      const transform = revealTransforms[levelIndex];
+      ctx.save();
+      ctx.shadowColor = 'rgba(48, 49, 48, .16)';
       ctx.shadowBlur = 12;
-      ctx.beginPath();
-      ctx.arc(f.px, f.py, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-    }
+      ctx.drawImage(layer, transform.offsetX, transform.offsetY);
+      ctx.restore();
+    });
   }
 
+  const actorPhases = ['rewinding', 'rewind-pause', 'drawing', 'pause', 'fadeout'];
+  if (actorPhases.includes(revealPhase)) {
+    const actorAlpha = revealPhase === 'fadeout'
+      ? Math.max(0, 1 - (Date.now() - revealPhaseStart) / 700)
+      : 1;
+    if (actorAlpha > 0) drawReplayActors(actorAlpha);
+  }
 }
 
 shareButton.addEventListener('click', async function () {
@@ -996,13 +1085,21 @@ function gameLoop() {
   if (keys['ArrowDown']) dy += 1;
   if (keys['ArrowLeft']) dx -= 1;
   if (keys['ArrowRight']) dx += 1;
+  if (dx === 0 && dy === 0) {
+    dx = pointerDirection.x;
+    dy = pointerDirection.y;
+  }
   if (dx !== 0 || dy !== 0) tryMove(dx, dy);
 
   updateTimer();
+  if (gameState.state === 'playing') recordGameplayFrame(false);
   render();
   requestAnimationFrame(gameLoop);
 }
 
 // -- Start -----------------------------------------------------------
+if (window.matchMedia('(pointer: coarse)').matches) {
+  document.getElementById('moveHint').textContent = 'drag anywhere to move';
+}
 resetLevel();
 gameLoop();
