@@ -1019,50 +1019,45 @@ window.addEventListener('resize', function () {
 });
 
 function drawRevealOutlines() {
-  const wallFns = [isWallLevel1, isWallLevel2, isWallLevel3];
+  revealTransforms.forEach(function (transform, levelIndex) {
+    const panelSize = GRID_SIZE * transform.scale;
+    const circles = LEVELS[levelIndex].circles.filter(function (circle) {
+      return !circle.invisible;
+    });
 
-  for (let lvl = 0; lvl < revealTransforms.length; lvl++) {
-    const t = revealTransforms[lvl];
-    const isWall = wallFns[lvl];
-    if (!isWall) continue;
-
-    // Draw walkable cells as subtle fill
+    // One even-odd path preserves the exact circle geometry without a pixel-grid staircase.
+    ctx.beginPath();
+    ctx.rect(transform.offsetX, transform.offsetY, panelSize, panelSize);
+    circles.forEach(function (circle) {
+      const centerX = transform.offsetX + circle.x * transform.scale;
+      const centerY = transform.offsetY + circle.y * transform.scale;
+      const radius = circle.radius * transform.scale;
+      ctx.moveTo(centerX + radius, centerY);
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    });
     ctx.fillStyle = 'rgba(48, 49, 48, .1)';
-    for (let x = 0; x < GRID_SIZE; x++) {
-      for (let y = 0; y < GRID_SIZE; y++) {
-        if (!isWall(x + 0.5, y + 0.5)) {
-          const px = x * t.scale + t.offsetX;
-          const py = y * t.scale + t.offsetY;
-          ctx.fillRect(px, py, t.scale, t.scale);
-        }
-      }
-    }
+    ctx.fill('evenodd');
 
-    // Draw edges where walkable meets wall for a thin outline effect
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(transform.offsetX, transform.offsetY, panelSize, panelSize);
+    ctx.clip();
     ctx.strokeStyle = 'rgba(48, 49, 48, .2)';
-    ctx.lineWidth = 1;
-    for (let x = 0; x < GRID_SIZE; x++) {
-      for (let y = 0; y < GRID_SIZE; y++) {
-        if (isWall(x + 0.5, y + 0.5)) continue;
-        const px = x * t.scale + t.offsetX;
-        const py = y * t.scale + t.offsetY;
-
-        // Check each neighbor; draw edge if neighbor is wall or out of bounds
-        if (x === 0 || isWall(x - 0.5, y + 0.5)) {
-          ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py + t.scale); ctx.stroke();
-        }
-        if (x === GRID_SIZE - 1 || isWall(x + 1.5, y + 0.5)) {
-          ctx.beginPath(); ctx.moveTo(px + t.scale, py); ctx.lineTo(px + t.scale, py + t.scale); ctx.stroke();
-        }
-        if (y === 0 || isWall(x + 0.5, y - 0.5)) {
-          ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + t.scale, py); ctx.stroke();
-        }
-        if (y === GRID_SIZE - 1 || isWall(x + 0.5, y + 1.5)) {
-          ctx.beginPath(); ctx.moveTo(px, py + t.scale); ctx.lineTo(px + t.scale, py + t.scale); ctx.stroke();
-        }
-      }
-    }
-  }
+    ctx.lineWidth = Math.max(1, transform.scale * .08);
+    circles.forEach(function (circle) {
+      ctx.beginPath();
+      ctx.arc(
+        transform.offsetX + circle.x * transform.scale,
+        transform.offsetY + circle.y * transform.scale,
+        circle.radius * transform.scale,
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+    });
+    ctx.strokeRect(transform.offsetX, transform.offsetY, panelSize, panelSize);
+    ctx.restore();
+  });
 }
 
 function drawReplayActors(alpha) {
